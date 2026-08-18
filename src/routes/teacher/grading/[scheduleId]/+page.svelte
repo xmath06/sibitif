@@ -5,7 +5,7 @@
   import Card from '$components/ui/Card.svelte';
   import Badge from '$components/ui/Badge.svelte';
   import Button from '$components/ui/Button.svelte';
-  import { Loader2, ArrowLeft, Pencil, X, FileCheck2 } from 'lucide-svelte';
+  import { Loader2, ArrowLeft, Pencil, X, FileCheck2, Download } from 'lucide-svelte';
   import Html from '$components/Html.svelte';
 
   let scheduleId = $derived($page.params.scheduleId ?? '');
@@ -63,6 +63,13 @@
     } catch (e) { formErr = e instanceof ApiError ? e.message : 'Gagal menyimpan'; }
     finally { saving = false; }
   }
+  async function dl(studentExamId: string) {
+    try {
+      await api.download(`/grading/${studentExamId}/export`);
+    } catch (e) {
+      error = e instanceof ApiError ? e.message : 'Gagal mengunduh DOCX';
+    }
+  }
 
   onMount(load);
 </script>
@@ -99,7 +106,10 @@
             <td class="px-4 py-3 text-foreground">{se?.totalScore ?? r.totalScore ?? '—'}</td>
             <td class="px-4 py-3"><Badge tone={se?.status === 'WAITING_GRADING' ? 'warning' : 'primary'}>{se?.status ?? r.status ?? '—'}</Badge></td>
             <td class="px-4 py-3 text-right">
-              <Button variant="outline" size="sm" onclick={() => openGrade(se?.id ?? r.studentExamId)}><Pencil class="h-4 w-4" /> Nilai Esai</Button>
+              <div class="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onclick={() => dl(se?.id ?? r.studentExamId)}><Download class="h-4 w-4" /> DOCX</Button>
+                <Button variant="outline" size="sm" onclick={() => openGrade(se?.id ?? r.studentExamId)}><Pencil class="h-4 w-4" /> Nilai Esai</Button>
+              </div>
             </td>
           </tr>
         {/each}

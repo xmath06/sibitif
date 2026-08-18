@@ -5,7 +5,7 @@
   import Card from '$components/ui/Card.svelte';
   import Badge from '$components/ui/Badge.svelte';
   import Button from '$components/ui/Button.svelte';
-  import { Loader2, Plus, Pencil, Trash2, X, Clock, Layers } from 'lucide-svelte';
+  import { Loader2, Plus, Pencil, Trash2, X, Clock, Layers, Download } from 'lucide-svelte';
   import ExcelImportButton from '$components/ExcelImportButton.svelte';
   import Html from '$components/Html.svelte';
   import { importPackages } from '$lib/imports';
@@ -86,6 +86,13 @@
   async function del(p: Pkg) {
     if (!confirm(`Hapus paket "${p.title}"?`)) return;
     await api.del(`/packages/${p.id}`); await load();
+  }
+  async function dl(p: Pkg) {
+    try {
+      await api.download(`/packages/${p.id}/export`);
+    } catch (e) {
+      error = e instanceof ApiError ? e.message : 'Gagal mengunduh DOCX';
+    }
   }
   async function openManage(p: Pkg) {
     managePkg = p;
@@ -218,6 +225,7 @@
           <h3 class="font-semibold text-foreground">{p.title}</h3>
           <div class="flex gap-1">
             <Button variant="ghost" size="icon" onclick={() => openManage(p)} title="Kelola Soal"><Layers class="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" onclick={() => dl(p)} title="Download DOCX"><Download class="h-4 w-4" /></Button>
             <Button variant="ghost" size="icon" onclick={() => openEdit(p)} title="Edit"><Pencil class="h-4 w-4" /></Button>
             <Button variant="ghost" size="icon" onclick={() => del(p)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
           </div>

@@ -114,5 +114,46 @@ export const api = {
     const fd = new FormData();
     fd.append('file', file);
     return apiFetch<T>(path, { method: 'POST', body: fd });
+  },
+  download: async (path: string) => {
+    const url = new URL(`${API_URL}${path}`, window.location.origin);
+    const run = () =>
+      fetch(url.toString(), {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Accept: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
+      });
+    let res = await run();
+    if (res.status === 401) {
+      if (await doRefresh()) res = await run();
+      else {
+        window.location.href = '/login';
+        throw new ApiError('Sesi berakhir, silakan login kembali', 401, 'UNAUTHORIZED');
+      }
+    }
+    if (!res.ok) {
+      let payload: { error?: { message?: string; code?: string; details?: unknown } } = {};
+      try {
+        payload = await res.json();
+      } catch {
+        /* ignore */
+      }
+      throw new ApiError(
+        payload.error?.message ?? `Request gagal (${res.status})`,
+        res.status,
+        payload.error?.code ?? 'HTTP_ERROR',
+        payload.error?.details
+      );
+    }
+    const blob = await res.blob();
+    const disp = res.headers.get('Content-Disposition') ?? '';
+    const filename = disp.match(/filename="?([^";]+)"?/)?.[1] ?? 'download.docx';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
   }
 };
