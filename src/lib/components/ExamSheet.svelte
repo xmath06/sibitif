@@ -9,6 +9,8 @@
   import { PanelLeftClose, PanelLeftOpen, Flag, CheckCircle2, Loader2, Send, Wifi, WifiOff } from 'lucide-svelte';
   import { formatDuration, cn } from '$lib/utils';
   import Html from '$components/Html.svelte';
+  import RichTextEditor from '$components/RichTextEditor.svelte';
+  import { QUESTION_TYPE_LABELS as TL } from '$lib/questionTypes';
 
   let { studentExamId }: { studentExamId: string } = $props();
 
@@ -310,7 +312,7 @@
             <div class="mb-4 flex items-start justify-between gap-3">
               <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Soal {exam.questions.findIndex((q) => q.id === currentQuestion.id) + 1} / {exam.questions.length}
-                <Badge tone="primary" class="ml-2">{currentQuestion.questionType}</Badge>
+                <Badge tone="primary" class="ml-2">{TL[currentQuestion.questionType]}</Badge>
               </span>
               <button onclick={() => toggleFlag(currentQuestion)} class={cn('inline-flex items-center gap-1 text-xs', a.isFlagged ? 'text-amber-600' : 'text-muted-foreground')}>
                 <Flag class="h-4 w-4" /> {a.isFlagged ? 'Ditandai' : 'Tandai'}
@@ -323,13 +325,16 @@
 
             {#if currentQuestion.questionType === 'ESSAY'}
               <div class="mt-4">
-                <!-- RichTextEditor dapat diimpor; di sini pakai textarea ringan untuk esai -->
-                <textarea
-                  class="min-h-[200px] w-full rounded-xl border border-border bg-card p-4 text-[15px] leading-relaxed outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Tulis esai Anda…"
-                  value={a.essayAnswer?.replace(/<[^>]*>/g, '') ?? ''}
-                  oninput={(e) => setEssay(currentQuestion, (e.currentTarget as HTMLTextAreaElement).value)}
-                ></textarea>
+                {#key currentQuestion.id}
+                  <RichTextEditor
+                    value={a.essayAnswer}
+                    onChange={(h) => setEssay(currentQuestion, h)}
+                    placeholder="Tulis esai Anda… (rumus, tabel & gambar didukung)"
+                    minWordCount={currentQuestion.minWordCount ?? null}
+                    maxWordCount={currentQuestion.maxWordCount ?? null}
+                    showFlash={false}
+                  />
+                {/key}
                 {#if currentQuestion.minWordCount || currentQuestion.maxWordCount}
                   <p class="mt-1 text-xs text-muted-foreground">
                     Batas kata: {currentQuestion.minWordCount ?? 0}–{currentQuestion.maxWordCount ?? '∞'}

@@ -125,3 +125,162 @@ math-field:focus-within {
   background: hsl(var(--muted));
   font-weight: 600;
 }
+
+/* Konten dokumentasi (/docs) — render markdown */
+.docs-content h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  scroll-margin-top: 5.5rem;
+}
+.docs-content h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 2rem 0 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid hsl(var(--border));
+  scroll-margin-top: 5.5rem;
+}
+.docs-content h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.4rem;
+  scroll-margin-top: 5.5rem;
+}
+.docs-content p {
+  margin: 0.5rem 0;
+  line-height: 1.65;
+  color: hsl(var(--muted-foreground));
+}
+.docs-content ul,
+.docs-content ol {
+  margin: 0.5rem 0 0.5rem 1.25rem;
+  color: hsl(var(--muted-foreground));
+}
+.docs-content ul {
+  list-style: disc;
+}
+.docs-content ol {
+  list-style: decimal;
+}
+.docs-content li {
+  margin: 0.2rem 0;
+}
+.docs-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.875rem;
+}
+.docs-content th,
+.docs-content td {
+  border: 1px solid hsl(var(--border));
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+.docs-content th {
+  background: hsl(var(--muted));
+  font-weight: 600;
+}
+.docs-content code {
+  background: hsl(var(--secondary));
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.85em;
+}
+.docs-content blockquote {
+  border-left: 3px solid hsl(var(--primary));
+  padding-left: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  margin: 0.75rem 0;
+}
+.docs-content hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  margin: 2rem 0;
+}
+
+/* Section berwarna lembut (band) — pembatas antar langkah di dokumentasi */
+.docs-band {
+  border-radius: 0.75rem;
+  padding: 0.35rem 1.25rem 1.1rem;
+  margin-top: 1.5rem;
+  border-top: 3px solid;
+}
+.docs-band h1,
+.docs-band h2 {
+  margin-top: 1rem;
+  border-bottom: none;
+}
+.docs-band h3 {
+  border-left: 3px solid;
+  padding-left: 0.5rem;
+}
+.docs-band ol li::marker {
+  font-weight: 700;
+}
+
+.docs-band.band-0 {
+  background: hsl(243 75% 97%);
+  border-color: hsl(243 75% 76%);
+}
+.docs-band.band-0 h1,
+.docs-band.band-0 h2 {
+  color: hsl(243 75% 38%);
+}
+.docs-band.band-0 h3 {
+  border-color: hsl(243 75% 76%);
+  color: hsl(243 75% 42%);
+}
+.docs-band.band-0 ol li::marker {
+  color: hsl(243 75% 48%);
+}
+
+.docs-band.band-1 {
+  background: hsl(190 70% 96%);
+  border-color: hsl(190 70% 74%);
+}
+.docs-band.band-1 h1,
+.docs-band.band-1 h2 {
+  color: hsl(190 75% 36%);
+}
+.docs-band.band-1 h3 {
+  border-color: hsl(190 70% 74%);
+  color: hsl(190 75% 40%);
+}
+.docs-band.band-1 ol li::marker {
+  color: hsl(190 75% 45%);
+}
+
+.docs-band.band-2 {
+  background: hsl(160 60% 95%);
+  border-color: hsl(160 60% 72%);
+}
+.docs-band.band-2 h1,
+.docs-band.band-2 h2 {
+  color: hsl(160 65% 34%);
+}
+.docs-band.band-2 h3 {
+  border-color: hsl(160 60% 72%);
+  color: hsl(160 65% 38%);
+}
+.docs-band.band-2 ol li::marker {
+  color: hsl(160 65% 44%);
+}
+
+.docs-band.band-3 {
+  background: hsl(38 90% 95%);
+  border-color: hsl(38 90% 74%);
+}
+.docs-band.band-3 h1,
+.docs-band.band-3 h2 {
+  color: hsl(38 95% 38%);
+}
+.docs-band.band-3 h3 {
+  border-color: hsl(38 90% 74%);
+  color: hsl(38 95% 42%);
+}
+.docs-band.band-3 ol li::marker {
+  color: hsl(38 95% 46%);
+}

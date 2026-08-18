@@ -65,7 +65,8 @@
     disabled = false,
     onChange = (_html: string) => {},
     minWordCount = null,
-    maxWordCount = null
+    maxWordCount = null,
+    showFlash = true
   }: {
     value?: string;
     placeholder?: string;
@@ -73,6 +74,7 @@
     onChange?: (html: string) => void;
     minWordCount?: number | null;
     maxWordCount?: number | null;
+    showFlash?: boolean;
   } = $props();
 
   let el: HTMLDivElement;
@@ -229,9 +231,9 @@
         <Table2 class="h-4 w-4" />
       </Button>
       <span class="ml-auto text-xs text-muted-foreground tabular-nums">
-        {#if saveFlash === 'saving'}
+        {#if showFlash && saveFlash === 'saving'}
           <span class="inline-flex items-center gap-1"><Loader2 class="h-3 w-3 animate-spin" /> Menyimpan draf…</span>
-        {:else if saveFlash === 'saved'}
+        {:else if showFlash && saveFlash === 'saved'}
           <span class="inline-flex items-center gap-1 text-emerald-600"><span>✓</span> Tersimpan di server</span>
         {/if}
         {#if minWordCount != null || maxWordCount != null}

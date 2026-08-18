@@ -43,6 +43,7 @@
               {#if $user.role === 'ADMIN'}<a href="/admin/users" class={navCls('/admin/users')}>User</a>{/if}
               {#if $user.role === 'ADMIN'}<a href="/admin/classes" class={navCls('/admin/classes')}>Kelas</a>{/if}
               {#if $user.role === 'ADMIN' || $user.role === 'TEACHER'}<a href="/teacher/students" class={navCls('/teacher/students')}>Siswa</a>{/if}
+              {#if $user.role === 'ADMIN' || $user.role === 'TEACHER'}<a href="/docs" class={navCls('/docs')}>Dokumentasi</a>{/if}
             </nav>
           {/if}
         {/if}

@@ -41,6 +41,7 @@
     "clsx": "^2.1.1",
     "katex": "^0.16.11",
     "lucide-svelte": "^0.452.0",
+    "marked": "^18.0.10",
     "mathlive": "^0.101.0",
     "tailwind-merge": "^2.5.4",
     "xlsx": "^0.18.5"

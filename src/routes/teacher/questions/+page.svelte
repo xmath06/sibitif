@@ -11,6 +11,7 @@
   import ExcelImportButton from '$components/ExcelImportButton.svelte';
   import Html from '$components/Html.svelte';
   import { importQuestions } from '$lib/imports';
+  import { QUESTION_TYPE_LABELS as TL, QUESTION_TYPE_HINTS as TH } from '$lib/questionTypes';
 
   interface Topic { id: string; name: string; subjectId: string }
   interface Subject { id: string; name: string; topics: Topic[] }
@@ -18,6 +19,11 @@
   interface Question { id: string; questionText: string; questionType: QuestionType; minWordCount?: number | null; maxWordCount?: number | null; options: Opt[] }
 
   const TYPES: QuestionType[] = ['MCQ', 'ESSAY', 'TRUE_FALSE', 'POLY_CHOICE', 'MULTI_SELECT'];
+
+  function isBenar(o: Opt) { return Number(o.scoreWeight ?? 0) > 0; }
+  function kunciOf(q: Question) {
+    return q.options.map((o, i) => (isBenar(o) ? String.fromCharCode(65 + i) : '')).filter(Boolean).join(', ');
+  }
 
   let subjects = $state<Subject[]>([]);
   let topicId = $state<string>($page.url.searchParams.get('topicId') ?? '');
@@ -49,15 +55,15 @@
 
   function openCreate() {
     editing = null;
-    f = { questionText: '', questionType: 'MCQ', minWordCount: '', maxWordCount: '', options: [{ optionText: '' }] };
+    f = { questionText: '', questionType: 'MCQ', minWordCount: '', maxWordCount: '', options: [{ optionText: '', scoreWeight: '0' }] };
     formErr = ''; show = true;
   }
   function openEdit(q: Question) {
     editing = q;
-    f = { questionText: q.questionText, questionType: q.questionType, minWordCount: String(q.minWordCount ?? ''), maxWordCount: String(q.maxWordCount ?? ''), options: q.options.length ? q.options.map((o) => ({ id: o.id, optionText: o.optionText })) : [{ optionText: '' }] };
+    f = { questionText: q.questionText, questionType: q.questionType, minWordCount: String(q.minWordCount ?? ''), maxWordCount: String(q.maxWordCount ?? ''), options: q.options.length ? q.options.map((o) => ({ id: o.id, optionText: o.optionText, scoreWeight: String(o.scoreWeight ?? '0') })) : [{ optionText: '', scoreWeight: '0' }] };
     formErr = ''; show = true;
   }
-  function addOpt() { f.options = [...f.options, { optionText: '' }]; }
+  function addOpt() { f.options = [...f.options, { optionText: '', scoreWeight: '0' }]; }
   function delOpt(i: number) { f.options = f.options.filter((_, idx) => idx !== i); }
   function onTypeChange() {
     if (f.questionType === 'ESSAY') f.options = [];
@@ -65,6 +71,12 @@
   }
   async function save() {
     saving = true; formErr = '';
+    const hasBenar = f.options.some((o) => Number(o.scoreWeight ?? 0) > 0);
+    if ((f.questionType === 'MCQ' || f.questionType === 'TRUE_FALSE') && !hasBenar) {
+      formErr = 'Tandai minimal satu jawaban sebagai "Benar" agar koreksi otomatis berjalan.';
+      saving = false;
+      return;
+    }
     const body: any = {
       topicId,
       questionText: f.questionText,
@@ -72,7 +84,7 @@
     };
     if (f.minWordCount !== '') body.minWordCount = Number(f.minWordCount);
     if (f.maxWordCount !== '') body.maxWordCount = Number(f.maxWordCount);
-    if (f.questionType !== 'ESSAY') body.options = f.options.filter((o) => o.optionText.trim()).map((o) => ({ optionText: o.optionText }));
+    if (f.questionType !== 'ESSAY') body.options = f.options.filter((o) => o.optionText.trim()).map((o) => ({ optionText: o.optionText, scoreWeight: Number(o.scoreWeight ?? 0) }));
     try {
       if (editing) await api.put(`/questions/${editing.id}`, body);
       else await api.post('/questions', body);
@@ -131,9 +143,18 @@
       <Card class="p-4">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <p class="text-xs text-muted-foreground">Soal {i + 1} <Badge tone="primary" class="ml-1">{q.questionType}</Badge></p>
+            <p class="text-xs text-muted-foreground">Soal {i + 1} <Badge tone="primary" class="ml-1">{TL[q.questionType]}</Badge></p>
             <Html html={q.questionText} class="mt-0.5 text-sm text-foreground" />
-            {#if q.options.length}<p class="mt-1 text-xs text-muted-foreground">{q.options.length} opsi</p>{/if}
+            {#if q.options.length}
+              <p class="mt-1 text-xs text-muted-foreground">
+                {q.options.length} opsi
+                {#if q.questionType === 'POLY_CHOICE'}
+                  · Bobot: {q.options.map((o) => Number(o.scoreWeight ?? 0)).join(', ')}
+                {:else if q.questionType !== 'ESSAY'}
+                  · Kunci: {kunciOf(q) || '—'}
+                {/if}
+              </p>
+            {/if}
           </div>
           <div class="flex shrink-0 gap-1">
             <Button variant="ghost" size="icon" onclick={() => openEdit(q)} title="Edit"><Pencil class="h-4 w-4" /></Button>
@@ -160,8 +181,9 @@
         </div>
         <label class="block"><span class="mb-1 block text-sm font-medium">Tipe</span>
           <select bind:value={f.questionType} onchange={onTypeChange} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
-            {#each TYPES as t}<option value={t}>{t}</option>{/each}
+            {#each TYPES as t}<option value={t}>{TL[t]}</option>{/each}
           </select>
+          <p class="mt-1 text-[11px] text-muted-foreground">{TH[f.questionType]}</p>
         </label>
         {#if f.questionType === 'ESSAY'}
           <div class="grid grid-cols-2 gap-3">
@@ -176,10 +198,24 @@
                 <div class="flex items-center gap-2">
                   <span class="text-xs text-muted-foreground">{String.fromCharCode(65 + idx)}.</span>
                   <input bind:value={o.optionText} class="h-10 flex-1 rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring" placeholder="Teks opsi" />
+                  {#if f.questionType !== 'POLY_CHOICE'}
+                    <label class="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground" title="Tandai jawaban benar (bobot 1)">
+                      <input type="checkbox" checked={isBenar(o)} onchange={(e: Event) => (o.scoreWeight = (e.currentTarget as HTMLInputElement).checked ? '1' : '0')} class="h-4 w-4 accent-primary" />
+                      Benar
+                    </label>
+                  {/if}
+                  <input type="number" min="0" step="0.5" value={o.scoreWeight} oninput={(e: Event) => (o.scoreWeight = (e.currentTarget as HTMLInputElement).value)} class="h-10 w-20 rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" placeholder="Bobot" title="Bobot jawaban (1 = benar; untuk skala/psikologi isi 0-4 dst.)" />
                   <Button variant="ghost" size="icon" onclick={() => delOpt(idx)} disabled={f.options.length === 1}><Trash2 class="h-4 w-4 text-rose-600" /></Button>
                 </div>
               {/each}
             </div>
+            <p class="mt-2 text-[11px] text-muted-foreground">
+              {f.questionType === 'POLY_CHOICE'
+                ? 'Setiap opsi punya bobot; nilai siswa = bobot opsi yang dipilih (cocok untuk skala/tes psikologi).'
+                : f.questionType === 'MULTI_SELECT'
+                  ? 'Boleh memilih lebih dari satu; nilai = jumlah bobot opsi yang dipilih.'
+                  : 'Centang "Benar" pada jawaban yang benar (bobot 1) agar koreksi otomatis bekerja.'}
+            </p>
           </div>
         {/if}
       </div>

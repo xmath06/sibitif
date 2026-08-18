@@ -6,6 +6,7 @@
   import Badge from '$components/ui/Badge.svelte';
   import Button from '$components/ui/Button.svelte';
   import { Loader2, ArrowLeft, Pencil, X, FileCheck2 } from 'lucide-svelte';
+  import Html from '$components/Html.svelte';
 
   let scheduleId = $derived($page.params.scheduleId ?? '');
   let loading = $state(true);
@@ -16,7 +17,7 @@
   // modal penilaian esai
   let show = $state(false);
   let detail = $state<any>(null);
-  let grades = $state<{ questionId: string; score: string; teacherFeedback: string }[]>([]);
+  let essays = $state<{ questionId: string; questionText: string; essayAnswer: string; wordCount?: number; score: string; teacherFeedback: string }[]>([]);
   let saving = $state(false);
   let formErr = $state('');
 
@@ -37,9 +38,16 @@
       const d = await api.get(`/grading/${studentExamId}`);
       detail = d as any;
       const se = detail?.studentExam ?? detail;
-      grades = (se?.answers ?? [])
+      essays = (se?.answers ?? [])
         .filter((a: any) => a.question?.questionType === 'ESSAY' || a.questionType === 'ESSAY' || a.essayAnswer)
-        .map((a: any) => ({ questionId: a.questionId, score: String(a.score ?? ''), teacherFeedback: a.teacherFeedback ?? '' }));
+        .map((a: any) => ({
+          questionId: a.questionId,
+          questionText: a.question?.questionText ?? '',
+          essayAnswer: a.essayAnswer ?? '',
+          wordCount: a.wordCount ?? undefined,
+          score: String(a.score ?? ''),
+          teacherFeedback: a.teacherFeedback ?? ''
+        }));
       show = true;
     } catch (e) { formErr = e instanceof ApiError ? e.message : 'Gagal memuat jawaban'; }
   }
@@ -49,7 +57,7 @@
     const studentExamId = (detail.studentExam ?? detail).id;
     try {
       await api.post(`/grading/${studentExamId}/essays`, {
-        grades: grades.map((g) => ({ questionId: g.questionId, score: g.score === '' ? null : Number(g.score), teacherFeedback: g.teacherFeedback || null }))
+        grades: essays.map((g) => ({ questionId: g.questionId, score: g.score === '' ? null : Number(g.score), teacherFeedback: g.teacherFeedback || null }))
       });
       show = false; await load();
     } catch (e) { formErr = e instanceof ApiError ? e.message : 'Gagal menyimpan'; }
@@ -108,14 +116,25 @@
         <button onclick={() => (show = false)} class="text-muted-foreground hover:text-foreground"><X class="h-5 w-5" /></button>
       </div>
       {#if formErr}<p class="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{formErr}</p>{/if}
-      {#if grades.length === 0}
+      {#if essays.length === 0}
         <p class="text-sm text-muted-foreground">Tidak ada soal esai pada ujian ini.</p>
       {:else}
         <div class="space-y-4">
-          {#each grades as g, i (g.questionId)}
+          {#each essays as g, i (g.questionId)}
             <div class="rounded-lg border border-border p-3">
               <p class="text-xs font-medium text-muted-foreground">Soal Esai #{i + 1}</p>
-              <label class="mt-1 block text-sm">Nilai
+              <div class="mt-1 text-sm text-foreground"><Html html={g.questionText} /></div>
+              <div class="mt-2 rounded-lg bg-secondary/40 p-3">
+                <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Jawaban siswa{g.wordCount != null ? ` (${g.wordCount} kata)` : ''}
+                </p>
+                {#if g.essayAnswer}
+                  <div class="text-sm text-foreground"><Html html={g.essayAnswer} /></div>
+                {:else}
+                  <p class="text-sm italic text-muted-foreground">Kosong</p>
+                {/if}
+              </div>
+              <label class="mt-2 block text-sm">Nilai
                 <input bind:value={g.score} type="number" class="ml-2 h-9 w-24 rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
               </label>
               <textarea bind:value={g.teacherFeedback} rows="2" placeholder="Catatan (opsional)" class="mt-2 w-full rounded-lg border border-border bg-card p-2 text-sm outline-none focus:ring-2 focus:ring-ring"></textarea>
@@ -125,7 +144,7 @@
       {/if}
       <div class="mt-5 flex justify-end gap-2">
         <Button variant="outline" onclick={() => (show = false)}>Batal</Button>
-        <Button onclick={saveGrades} disabled={saving || grades.length === 0}>{#if saving}<Loader2 class="h-4 w-4 animate-spin" />{/if} Simpan Nilai</Button>
+        <Button onclick={saveGrades} disabled={saving || essays.length === 0}>{#if saving}<Loader2 class="h-4 w-4 animate-spin" />{/if} Simpan Nilai</Button>
       </div>
     </Card>
   </div>

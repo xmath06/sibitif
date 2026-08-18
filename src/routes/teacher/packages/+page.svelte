@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api, ApiError } from '$api/client';
+  import type { QuestionType } from '$api/types';
   import Card from '$components/ui/Card.svelte';
   import Badge from '$components/ui/Badge.svelte';
   import Button from '$components/ui/Button.svelte';
@@ -8,9 +9,16 @@
   import ExcelImportButton from '$components/ExcelImportButton.svelte';
   import Html from '$components/Html.svelte';
   import { importPackages } from '$lib/imports';
+  import { QUESTION_TYPE_LABELS as TL } from '$lib/questionTypes';
 
   interface Subject { id: string; name: string; topics?: { id: string; name: string }[] }
-  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number }
+  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number> }
+
+  function pkgBreakdown(p: Pkg) {
+    return Object.entries(p.questionTypeCounts ?? {})
+      .map(([t, n]) => `${n} ${TL[t as QuestionType]}`)
+      .join(' · ');
+  }
 
   let packages = $state<Pkg[]>([]);
   let subjects = $state<Subject[]>([]);
@@ -149,6 +157,16 @@
     else next[id] = true;
     manageSelected = next;
   }
+  function selectedCountInTopic(topicId: string) {
+    return (manageQuestionsByTopic[topicId] ?? []).filter((q) => manageSelected[q.id]).length;
+  }
+  const manageSelectedTypes = $derived((() => {
+    const typeOf: Record<string, string> = {};
+    for (const qs of Object.values(manageQuestionsByTopic)) for (const q of qs) typeOf[q.id] = q.questionType;
+    const counts: Record<string, number> = {};
+    for (const id of Object.keys(manageSelected)) if (typeOf[id]) counts[typeOf[id]] = (counts[typeOf[id]] ?? 0) + 1;
+    return counts;
+  })());
   async function saveManage() {
     if (!managePkg) return;
     manageSaving = true;
@@ -210,6 +228,9 @@
           {#if p.passScore != null}<Badge tone="muted">Pass {p.passScore}</Badge>{/if}
           {#if p.questionCount != null}<Badge tone="muted"><Layers class="h-3 w-3" /> {p.questionCount} soal</Badge>{/if}
         </div>
+        {#if p.questionCount != null && Object.keys(p.questionTypeCounts ?? {}).length}
+          <p class="mt-2 text-xs text-muted-foreground">{pkgBreakdown(p)}</p>
+        {/if}
       </Card>
     {/each}
   </div>
@@ -273,15 +294,23 @@
                     ? 'rounded-full border border-primary bg-primary px-3 py-1 text-sm font-medium text-primary-foreground'
                     : 'rounded-full border border-border bg-card px-3 py-1 text-sm text-foreground hover:bg-accent'}>
                   {t.name}
+                  {#if manageSelectedTopics[t.id]}
+                    <span class="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/25 px-1.5 text-xs font-bold">{selectedCountInTopic(t.id)}</span>
+                  {/if}
                 </button>
               {/each}
             </div>
           {/if}
         </div>
       </div>
-      <div class="flex items-center justify-between px-5 py-2 text-sm text-muted-foreground">
+      <div class="flex flex-wrap items-center justify-between gap-1 px-5 py-2 text-sm text-muted-foreground">
         <span>Pilih soal per topik</span>
-        <span class="font-medium text-foreground">{Object.keys(manageSelected).length} soal dipilih</span>
+        <span class="font-medium text-foreground">
+          {Object.keys(manageSelected).length} soal dipilih
+          {#if Object.keys(manageSelectedTypes).length}
+            <span class="font-normal text-muted-foreground">({Object.entries(manageSelectedTypes).map(([t, n]) => `${n} ${TL[t as QuestionType]}`).join(' · ')})</span>
+          {/if}
+        </span>
       </div>
       <div class="min-h-[220px] flex-1 space-y-2 overflow-y-auto px-5 py-3">
         {#if manageLoading}
@@ -309,7 +338,7 @@
                 <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 hover:bg-accent">
                   <input type="checkbox" checked={!!manageSelected[q.id]} onchange={() => toggleSelect(q.id)} class="mt-1 accent-[hsl(var(--primary))]" />
                   <span class="min-w-0 flex-1">
-                    <span class="mb-1 inline-block rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground">{q.questionType}</span>
+                    <span class="mb-1 inline-block rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground">{TL[q.questionType as QuestionType]}</span>
                     <Html html={q.questionText} class="text-sm text-foreground" />
                   </span>
                 </label>

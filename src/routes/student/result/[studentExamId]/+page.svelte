@@ -6,6 +6,7 @@
   import Badge from '$components/ui/Badge.svelte';
   import Button from '$components/ui/Button.svelte';
   import { Loader2, CheckCircle2, XCircle, ArrowLeft, Trophy } from 'lucide-svelte';
+  import Html from '$components/Html.svelte';
 
   let id = $derived($page.params.studentExamId ?? '');
   let loading = $state(true);
@@ -22,7 +23,7 @@
     }
   });
 
-  const se = $derived(data?.studentExam ?? data);
+  const se = $derived((data as any)?.data ?? data?.studentExam ?? data);
   function computePassed(): boolean | null {
     if (!se) return null;
     if (typeof se.passed === 'boolean') return se.passed;
@@ -74,7 +75,9 @@
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm font-medium text-foreground">Soal {i + 1}</p>
-              {#if ans.essayAnswer}<p class="mt-1 text-sm text-muted-foreground line-clamp-3">{ans.essayAnswer.replace(/<[^>]*>/g, '')}</p>{/if}
+              {#if ans.essayAnswer}
+                <div class="mt-1 text-sm text-muted-foreground line-clamp-3"><Html html={ans.essayAnswer} /></div>
+              {/if}
               {#if ans.selectedOptionId || (ans.selectedOptionIds?.length)}
                 <p class="mt-1 text-sm text-muted-foreground">Opsi: {ans.selectedOptionIds?.join(', ') ?? ans.selectedOptionId}</p>
               {/if}
