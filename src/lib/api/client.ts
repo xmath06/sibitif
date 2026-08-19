@@ -1,4 +1,6 @@
-const API_BASE = (import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+import { PUBLIC_API_URL } from '$env/static/public';
+
+const API_BASE = (PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const API_PREFIX = '/api/v1';
 
 export const API_URL = `${API_BASE}${API_PREFIX}`;
