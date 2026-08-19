@@ -66,7 +66,8 @@
     onChange = (_html: string) => {},
     minWordCount = null,
     maxWordCount = null,
-    showFlash = true
+    showFlash = true,
+    compact = false
   }: {
     value?: string;
     placeholder?: string;
@@ -75,6 +76,9 @@
     minWordCount?: number | null;
     maxWordCount?: number | null;
     showFlash?: boolean;
+    // Mode ringkas untuk opsi jawaban: toolbar dibatasi (tebal/miring/rumus),
+    // tanpa tabel/gambar/list/judul, tinggi kecil.
+    compact?: boolean;
   } = $props();
 
   let el: HTMLDivElement;
@@ -117,6 +121,7 @@
   }
 
   function onPaste(e: ClipboardEvent) {
+    if (compact) return;
     const items = e.clipboardData?.items;
     if (!items) return;
     for (const it of items) {
@@ -130,6 +135,7 @@
   }
 
   function onDrop(e: DragEvent) {
+    if (compact) return;
     const f = e.dataTransfer?.files?.[0];
     if (f && f.type.startsWith('image/')) {
       e.preventDefault();
@@ -200,6 +206,7 @@
       <Button variant="ghost" size="icon" onclick={() => editor?.chain().focus().toggleItalic().run()} title="Miring">
         <Italic class="h-4 w-4" />
       </Button>
+      {#if !compact}
       <Button variant="ghost" size="icon" onclick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} title="Judul">
         <Heading2 class="h-4 w-4" />
       </Button>
@@ -224,26 +231,29 @@
           }}
         />
       </label>
+      {/if}
       <Button variant="ghost" size="icon" onclick={openMath} title="Sisipkan rumus (MathLive)">
         <Sigma class="h-4 w-4" />
       </Button>
+      {#if !compact}
       <Button variant="ghost" size="icon" onclick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} title="Sisipkan tabel 3×3">
         <Table2 class="h-4 w-4" />
       </Button>
+      {/if}
       <span class="ml-auto text-xs text-muted-foreground tabular-nums">
-        {#if showFlash && saveFlash === 'saving'}
+        {#if !compact && showFlash && saveFlash === 'saving'}
           <span class="inline-flex items-center gap-1"><Loader2 class="h-3 w-3 animate-spin" /> Menyimpan draf…</span>
-        {:else if showFlash && saveFlash === 'saved'}
+        {:else if !compact && showFlash && saveFlash === 'saved'}
           <span class="inline-flex items-center gap-1 text-emerald-600"><span>✓</span> Tersimpan di server</span>
         {/if}
-        {#if minWordCount != null || maxWordCount != null}
+        {#if !compact && (minWordCount != null || maxWordCount != null)}
           <span class={cn('ml-3', overMin && 'text-amber-600', overMax && 'text-rose-600')}>
             {wordCount} kata{minWordCount != null ? ` (min ${minWordCount})` : ''}{maxWordCount != null ? ` (max ${maxWordCount})` : ''}
           </span>
         {/if}
       </span>
     </div>
-    {#if tableActive}
+    {#if tableActive && !compact}
       <div class="flex flex-wrap items-center gap-1 border-b border-border bg-accent/40 px-2 py-1">
         <span class="mr-1 text-xs font-medium text-muted-foreground">Tabel:</span>
         <Button variant="ghost" size="sm" onclick={() => editor?.chain().focus().addRowAfter().run()} title="Tambah baris">+ Baris</Button>
@@ -253,7 +263,7 @@
     {/if}
   {/if}
 
-  <div bind:this={el} class="px-4 py-3 text-[15px] leading-relaxed"></div>
+  <div bind:this={el} class={compact ? 'min-h-[2.5rem] px-3 py-2 text-sm leading-relaxed' : 'px-4 py-3 text-[15px] leading-relaxed'}></div>
 
   {#if mathOpen}
     <div

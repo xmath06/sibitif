@@ -25,6 +25,14 @@
     return q.options.map((o, i) => (isBenar(o) ? String.fromCharCode(65 + i) : '')).filter(Boolean).join(', ');
   }
 
+  // Editor rich text mengembalikan HTML; paragraf kosong ("<p></p>") tidak dihitung sebagai opsi.
+  function isBlankHtml(html: string) {
+    if (!html) return true;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return !(tmp.textContent || '').trim() && !tmp.querySelector('img, .math-latex');
+  }
+
   let subjects = $state<Subject[]>([]);
   let topicId = $state<string>($page.url.searchParams.get('topicId') ?? '');
   let questions = $state<Question[]>([]);
@@ -84,7 +92,7 @@
     };
     if (f.minWordCount !== '') body.minWordCount = Number(f.minWordCount);
     if (f.maxWordCount !== '') body.maxWordCount = Number(f.maxWordCount);
-    if (f.questionType !== 'ESSAY') body.options = f.options.filter((o) => o.optionText.trim()).map((o) => ({ optionText: o.optionText, scoreWeight: Number(o.scoreWeight ?? 0) }));
+    if (f.questionType !== 'ESSAY') body.options = f.options.filter((o) => !isBlankHtml(o.optionText)).map((o) => ({ optionText: o.optionText, scoreWeight: Number(o.scoreWeight ?? 0) }));
     try {
       if (editing) await api.put(`/questions/${editing.id}`, body);
       else await api.post('/questions', body);
@@ -197,7 +205,19 @@
               {#each f.options as o, idx (idx)}
                 <div class="flex items-center gap-2">
                   <span class="text-xs text-muted-foreground">{String.fromCharCode(65 + idx)}.</span>
-                  <input bind:value={o.optionText} class="h-10 flex-1 rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring" placeholder="Teks opsi" />
+                  {#if f.questionType === 'TRUE_FALSE'}
+                    <input bind:value={o.optionText} class="h-10 flex-1 rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring" placeholder="Teks opsi" />
+                  {:else}
+                    <div class="min-w-0 flex-1">
+                      <RichTextEditor
+                        compact
+                        value={o.optionText}
+                        onChange={(h) => (o.optionText = h)}
+                        placeholder="Teks opsi (rumus didukung)…"
+                        showFlash={false}
+                      />
+                    </div>
+                  {/if}
                   {#if f.questionType !== 'POLY_CHOICE'}
                     <label class="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground" title="Tandai jawaban benar (bobot 1)">
                       <input type="checkbox" checked={isBenar(o)} onchange={(e: Event) => (o.scoreWeight = (e.currentTarget as HTMLInputElement).checked ? '1' : '0')} class="h-4 w-4 accent-primary" />
