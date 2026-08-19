@@ -2,6 +2,11 @@ name = "sibitif"
 compatibility_date = "2025-01-01"
 main = "src/worker.ts"
 
+[vars]
+# Backend SnapDeploy. Disimpan di wrangler.toml karena deploy via CLI/CI
+# tidak selalu membawa vars dari dashboard ke versi yang aktif.
+BACKEND_URL = "https://sibiti-1a3be.containers.snapdeploy.app"
+
 [assets]
 directory = "./build"
 binding = "ASSETS"
