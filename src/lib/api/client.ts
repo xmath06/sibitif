@@ -1,6 +1,7 @@
-import { PUBLIC_API_URL } from '$env/static/public';
-
-const API_BASE = (PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+// Same-origin proxy: frontend memanggil /api/v1 relatif (origin sendiri),
+// diteruskan ke backend oleh Cloudflare Worker (lihat src/worker.ts).
+// Di development, Vite proxy mengarahkan /api ke localhost:3000.
+const API_BASE = '';
 const API_PREFIX = '/api/v1';
 
 export const API_URL = `${API_BASE}${API_PREFIX}`;
