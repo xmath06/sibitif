@@ -240,12 +240,13 @@ export function validateExpression(expression: string): { ok: boolean; message?:
 }
 
 export interface GraphOptions {
-  expression: string;
+  expressions: string[];
   xMin: number;
   xMax: number;
   yMin?: number | null;
   yMax?: number | null;
   showGrid?: boolean;
+  showLabels?: boolean;
   width?: number;
   height?: number;
 }
@@ -267,9 +268,30 @@ function fmt(v: number): string {
   return String(r);
 }
 
+// Warna kurva (siklus bila fungsi lebih banyak).
+const CURVE_COLORS = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#0d9488'];
+
+// Label persamaan di ujung kurva (kanan bawah/atas dari titik akhir).
+function curveLabel(expr: string, px: number, py: number, plotRight: number, plotBottom: number, color: string): string {
+  const text = expr;
+  const fontSize = 13;
+  const w = text.length * 7 + 14;
+  let x = px + 10;
+  let y = py - 8;
+  if (x + w > plotRight) x = plotRight - w;
+  if (y < 22) y = 22;
+  if (y > plotBottom) y = plotBottom;
+  return (
+    `<rect x="${fmt(x)}" y="${fmt(y - fontSize)}" width="${fmt(w)}" height="${fontSize + 8}" rx="5" fill="#ffffff" fill-opacity="0.85" stroke="#cbd5e1" stroke-width="0.5"/>` +
+    `<text x="${fmt(x + 7)}" y="${fmt(y - 2)}" font-family="Arial,sans-serif" font-size="${fontSize}" font-style="italic" fill="${color}">${text}</text>`
+  );
+}
+
 /**
- * Render grafik f(x) menjadi string `<svg …>`. 
- * Auto y-range bila yMin/yMax tidak diberikan: dihitung dari sampling kurva.
+ * Render grafik satu atau lebih fungsi f(x) menjadi string `<svg …>`.
+ * - `expressions`: array ekspresi; tiap fungsi digambar dengan warna berbeda.
+ * - Auto y-range bila yMin/yMax tidak diberikan: dihitung dari sampling semua kurva.
+ * - Label persamaan otomatis diletakkan di ujung tiap kurva bila `showLabels` (default true).
  */
 export function renderFunctionGraph(opts: GraphOptions): string {
   const W = opts.width ?? 600;
@@ -278,26 +300,30 @@ export function renderFunctionGraph(opts: GraphOptions): string {
   const plotW = W - margin.l - margin.r;
   const plotH = H - margin.t - margin.b;
   const showGrid = opts.showGrid ?? true;
+  const showLabels = opts.showLabels ?? true;
 
-  const f = compileExpression(opts.expression);
+  const exprs = opts.expressions.filter((e) => e.trim().length > 0);
+  const fns = exprs.map((e) => compileExpression(e));
   const xMin = opts.xMin;
   const xMax = opts.xMax;
 
-  // Tentukan y-range
+  // Tentukan y-range (dari semua fungsi)
   let yMin = opts.yMin ?? null;
   let yMax = opts.yMax ?? null;
   if (yMin == null || yMax == null) {
     const ys: number[] = [];
     const N = 500;
-    for (let i = 0; i <= N; i++) {
-      const x = xMin + ((xMax - xMin) * i) / N;
-      let y: number;
-      try {
-        y = f(x);
-      } catch {
-        continue;
+    for (const f of fns) {
+      for (let i = 0; i <= N; i++) {
+        const x = xMin + ((xMax - xMin) * i) / N;
+        let y: number;
+        try {
+          y = f(x);
+        } catch {
+          continue;
+        }
+        if (Number.isFinite(y)) ys.push(y);
       }
-      if (Number.isFinite(y)) ys.push(y);
     }
     // Klip outlier (persentil 2–98) agar asimtot (mis. 1/x) tidak merusak skala.
     let lo: number;
@@ -323,7 +349,7 @@ export function renderFunctionGraph(opts: GraphOptions): string {
   const sy = (y: number) => margin.t + plotH - ((y - yMin) / (yMax - yMin)) * plotH;
 
   const parts: string[] = [];
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Grafik ${opts.expression}">`);
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Grafik ${exprs.join(' ; ')}">`);
   parts.push(`<style>text{font-family:Arial,sans-serif;font-size:12px;fill:#334155}.grid{stroke:#e2e8f0;stroke-width:1}.axis{stroke:#0f172a;stroke-width:1.5}.curve{fill:none;stroke:#2563eb;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.tick{fill:#94a3b8}</style>`);
 
   // Garis bantu & label sumbu (angka di tepi)
@@ -357,40 +383,52 @@ export function renderFunctionGraph(opts: GraphOptions): string {
   }
 
   // Kurva: sampling + putus polyline di titik non-finite / di luar rentang / lompatan besar
-  const points: string[] = [];
-  const flush = () => {
-    if (points.length) {
-      parts.push(`<polyline class="curve" points="${points.join(' ')}"/>`);
-      points.length = 0;
+  const plotRight = margin.l + plotW;
+  const plotBottom = margin.t + plotH;
+  fns.forEach((f, idx) => {
+    const color = CURVE_COLORS[idx % CURVE_COLORS.length];
+    const points: string[] = [];
+    const flush = () => {
+      if (points.length) {
+        parts.push(`<polyline class="curve" stroke="${color}" points="${points.join(' ')}"/>`);
+        points.length = 0;
+      }
+    };
+    const N = 800;
+    let prevY: number | null = null;
+    let lastPx = 0;
+    let lastPy = 0;
+    for (let i = 0; i <= N; i++) {
+      const x = xMin + ((xMax - xMin) * i) / N;
+      let y: number;
+      try {
+        y = f(x);
+      } catch {
+        flush();
+        prevY = null;
+        continue;
+      }
+      if (!Number.isFinite(y) || y < yMin - (yMax - yMin) * 2 || y > yMax + (yMax - yMin) * 2) {
+        // keluar jangkauan (mis. mendekati asimtot) → akhiri segmen
+        flush();
+        prevY = null;
+        continue;
+      }
+      const px = sx(x);
+      const py = sy(Math.max(yMin, Math.min(yMax, y)));
+      if (prevY != null && Math.abs(y - prevY) > (yMax - yMin) * 4) {
+        flush();
+      }
+      points.push(`${fmt(px)},${fmt(py)}`);
+      lastPx = px;
+      lastPy = py;
+      prevY = y;
     }
-  };
-  const N = 800;
-  let prevY: number | null = null;
-  for (let i = 0; i <= N; i++) {
-    const x = xMin + ((xMax - xMin) * i) / N;
-    let y: number;
-    try {
-      y = f(x);
-    } catch {
-      flush();
-      prevY = null;
-      continue;
+    flush();
+    if (showLabels && exprs[idx]) {
+      parts.push(curveLabel(exprs[idx], lastPx, lastPy, plotRight, plotBottom, color));
     }
-    if (!Number.isFinite(y) || y < yMin - (yMax - yMin) * 2 || y > yMax + (yMax - yMin) * 2) {
-      // keluar jangkauan (mis. mendekati asimtot) → akhiri segmen
-      flush();
-      prevY = null;
-      continue;
-    }
-    const px = sx(x);
-    const py = sy(Math.max(yMin, Math.min(yMax, y)));
-    if (prevY != null && Math.abs(y - prevY) > (yMax - yMin) * 4) {
-      flush();
-    }
-    points.push(`${fmt(px)},${fmt(py)}`);
-    prevY = y;
-  }
-  flush();
+  });
 
   parts.push('</svg>');
   return parts.join('');
