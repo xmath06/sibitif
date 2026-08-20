@@ -3,6 +3,7 @@
   import { api, ApiError } from '$api/client';
   import Card from '$components/ui/Card.svelte';
   import Button from '$components/ui/Button.svelte';
+  import DataTable from '$components/ui/DataTable.svelte';
   import { Loader2, Plus, Pencil, Trash2, X } from 'lucide-svelte';
   import ExcelImportButton from '$components/ExcelImportButton.svelte';
   import { importClasses } from '$lib/imports';
@@ -71,7 +72,7 @@
   onMount(load);
 </script>
 
-<div class="mb-5 flex items-center justify-between">
+<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
   <div>
     <h1 class="text-xl font-bold text-foreground">Manajemen Kelas</h1>
     <p class="text-sm text-muted-foreground">Kelola jenjang & kelas/rombel untuk targeting jadwal dan penempatan siswa.</p>
@@ -94,31 +95,29 @@
 {:else if classes.length === 0}
   <Card class="p-8 text-center text-muted-foreground">Belum ada kelas.</Card>
 {:else}
-  <Card class="overflow-hidden p-0">
-    <table class="w-full text-sm">
-      <thead class="bg-secondary/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-        <tr>
-          <th class="px-4 py-3">Jenjang</th>
-          <th class="px-4 py-3">Kelas / Rombel</th>
-          <th class="px-4 py-3 text-right">Aksi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each classes as c (c.id)}
-          <tr class="border-t border-border">
-            <td class="px-4 py-3 font-medium text-foreground">Kelas {c.gradeLevel}</td>
-            <td class="px-4 py-3 text-muted-foreground">{c.name}</td>
-            <td class="px-4 py-3">
-              <div class="flex justify-end gap-1">
-                <Button variant="ghost" size="icon" onclick={() => openEdit(c)} title="Edit"><Pencil class="h-4 w-4" /></Button>
-                <Button variant="ghost" size="icon" onclick={() => remove(c)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
-              </div>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </Card>
+  <DataTable
+    rows={classes}
+    searchKeys={['gradeLevel', 'name']}
+    searchPlaceholder="Cari jenjang atau nama kelas…"
+    columns={[
+      { key: 'gradeLevel', label: 'Jenjang', sortable: true },
+      { key: 'name', label: 'Kelas / Rombel', sortable: true },
+      { key: 'actions', label: 'Aksi', align: 'right' }
+    ]}
+  >
+    {#snippet cell({ row, col })}
+      {#if col.key === 'gradeLevel'}
+        <span class="font-medium text-foreground">Kelas {row.gradeLevel}</span>
+      {:else if col.key === 'name'}
+        <span class="text-muted-foreground">{row.name}</span>
+      {:else if col.key === 'actions'}
+        <div class="flex justify-end gap-1">
+          <Button variant="ghost" size="icon" onclick={() => openEdit(row)} title="Edit"><Pencil class="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" onclick={() => remove(row)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
+        </div>
+      {/if}
+    {/snippet}
+  </DataTable>
 {/if}
 
 {#if showModal}

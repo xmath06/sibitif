@@ -5,6 +5,7 @@
   import Card from '$components/ui/Card.svelte';
   import Badge from '$components/ui/Badge.svelte';
   import Button from '$components/ui/Button.svelte';
+  import DataTable from '$components/ui/DataTable.svelte';
   import { Loader2, ArrowLeft, Pencil, X, FileCheck2, Download } from 'lucide-svelte';
   import Html from '$components/Html.svelte';
 
@@ -71,10 +72,22 @@
     }
   }
 
+  const recapRows = $derived(
+    recap.map((r) => {
+      const se = r.studentExam ?? r;
+      return {
+        id: se?.id ?? r.studentExamId ?? r.id ?? '',
+        studentName: se?.user?.name ?? se?.student?.name ?? r.studentName ?? '—',
+        totalScore: se?.totalScore ?? r.totalScore ?? '—',
+        status: se?.status ?? r.status ?? '—'
+      };
+    })
+  );
+
   onMount(load);
 </script>
 
-<div class="mb-5 flex items-center justify-between">
+<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
   <div>
     <h1 class="flex items-center gap-2 text-xl font-bold text-foreground"><FileCheck2 class="h-5 w-5 text-primary" /> Koreksi Ujian</h1>
     <p class="text-sm text-muted-foreground">{scheduleTitle || 'Jadwal'}</p>
@@ -88,34 +101,32 @@
 {:else if recap.length === 0}
   <Card class="p-8 text-center text-muted-foreground">Belum ada hasil.</Card>
 {:else}
-  <Card class="overflow-hidden p-0">
-    <table class="w-full text-sm">
-      <thead class="bg-secondary/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-        <tr>
-          <th class="px-4 py-3">Siswa</th>
-          <th class="px-4 py-3">Nilai</th>
-          <th class="px-4 py-3">Status</th>
-          <th class="px-4 py-3 text-right">Aksi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each recap as r, i (r.studentExamId ?? r.id ?? i)}
-          {@const se = r.studentExam ?? r}
-          <tr class="border-t border-border">
-            <td class="px-4 py-3 font-medium text-foreground">{se?.user?.name ?? se?.student?.name ?? r.studentName ?? '—'}</td>
-            <td class="px-4 py-3 text-foreground">{se?.totalScore ?? r.totalScore ?? '—'}</td>
-            <td class="px-4 py-3"><Badge tone={se?.status === 'WAITING_GRADING' ? 'warning' : 'primary'}>{se?.status ?? r.status ?? '—'}</Badge></td>
-            <td class="px-4 py-3 text-right">
-              <div class="flex justify-end gap-2">
-                <Button variant="outline" size="sm" onclick={() => dl(se?.id ?? r.studentExamId)}><Download class="h-4 w-4" /> DOCX</Button>
-                <Button variant="outline" size="sm" onclick={() => openGrade(se?.id ?? r.studentExamId)}><Pencil class="h-4 w-4" /> Nilai Esai</Button>
-              </div>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </Card>
+  <DataTable
+    rows={recapRows}
+    searchKeys={['studentName', 'totalScore', 'status']}
+    searchPlaceholder="Cari siswa, nilai, atau status…"
+    columns={[
+      { key: 'studentName', label: 'Siswa', sortable: true },
+      { key: 'totalScore', label: 'Nilai', sortable: true, align: 'right' },
+      { key: 'status', label: 'Status', sortable: true },
+      { key: 'actions', label: 'Aksi', align: 'right' }
+    ]}
+  >
+    {#snippet cell({ row, col })}
+      {#if col.key === 'studentName'}
+        <span class="font-medium text-foreground">{row.studentName}</span>
+      {:else if col.key === 'totalScore'}
+        <span class="text-right text-foreground">{row.totalScore}</span>
+      {:else if col.key === 'status'}
+        <Badge tone={row.status === 'WAITING_GRADING' ? 'warning' : 'primary'}>{row.status}</Badge>
+      {:else if col.key === 'actions'}
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onclick={() => dl(row.id)}><Download class="h-4 w-4" /> DOCX</Button>
+          <Button variant="outline" size="sm" onclick={() => openGrade(row.id)}><Pencil class="h-4 w-4" /> Nilai Esai</Button>
+        </div>
+      {/if}
+    {/snippet}
+  </DataTable>
 {/if}
 
 {#if show && detail}

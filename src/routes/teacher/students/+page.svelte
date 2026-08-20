@@ -5,6 +5,7 @@
   import Card from '$components/ui/Card.svelte';
   import Button from '$components/ui/Button.svelte';
   import Badge from '$components/ui/Badge.svelte';
+  import DataTable from '$components/ui/DataTable.svelte';
   import { Loader2, Plus, Pencil, Trash2, X, Users } from 'lucide-svelte';
   import ExcelImportButton from '$components/ExcelImportButton.svelte';
   import { importStudents } from '$lib/imports';
@@ -53,6 +54,10 @@
     return c ? `${c.gradeLevel} · ${c.name}` : '—';
   }
 
+  const rowsWithClass = $derived(
+    students.map((u) => ({ ...u, classLabel: className((u as any).classId) }))
+  );
+
   function openCreate() {
     editingId = null;
     f = { name: '', username: '', password: '', religion: '', classId: '' };
@@ -99,7 +104,7 @@
   onMount(load);
 </script>
 
-<div class="mb-5 flex items-center justify-between">
+<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
   <div>
     <h1 class="text-xl font-bold text-foreground">Manajemen Siswa</h1>
     <p class="text-sm text-muted-foreground">Kelola akun siswa (terpisah dari manajemen admin & guru).</p>
@@ -126,35 +131,35 @@
     <Users class="h-8 w-8" /> Belum ada siswa.
   </Card>
 {:else}
-  <Card class="overflow-hidden p-0">
-    <table class="w-full text-sm">
-      <thead class="bg-secondary/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-        <tr>
-          <th class="px-4 py-3">Nama</th>
-          <th class="px-4 py-3">Username</th>
-          <th class="px-4 py-3">Jenjang / Kelas</th>
-          <th class="px-4 py-3">Agama</th>
-          <th class="px-4 py-3 text-right">Aksi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each students as u (u.id)}
-          <tr class="border-t border-border">
-            <td class="px-4 py-3 font-medium text-foreground">{u.name}</td>
-            <td class="px-4 py-3 text-muted-foreground">{u.username}</td>
-            <td class="px-4 py-3 text-muted-foreground">{className((u as any).classId)}</td>
-            <td class="px-4 py-3 text-muted-foreground">{u.religion ?? '-'}</td>
-            <td class="px-4 py-3">
-              <div class="flex justify-end gap-1">
-                <Button variant="ghost" size="icon" onclick={() => openEdit(u)} title="Edit"><Pencil class="h-4 w-4" /></Button>
-                <Button variant="ghost" size="icon" onclick={() => remove(u)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
-              </div>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </Card>
+  <DataTable
+    rows={rowsWithClass}
+    searchKeys={['name', 'username', 'classLabel', 'religion']}
+    searchPlaceholder="Cari nama, username, kelas, atau agama…"
+    columns={[
+      { key: 'name', label: 'Nama', sortable: true },
+      { key: 'username', label: 'Username', sortable: true },
+      { key: 'classLabel', label: 'Jenjang / Kelas', sortable: true },
+      { key: 'religion', label: 'Agama', sortable: true },
+      { key: 'actions', label: 'Aksi', align: 'right' }
+    ]}
+  >
+    {#snippet cell({ row, col })}
+      {#if col.key === 'name'}
+        <span class="font-medium text-foreground">{row.name}</span>
+      {:else if col.key === 'username'}
+        <span class="text-muted-foreground">{row.username}</span>
+      {:else if col.key === 'classLabel'}
+        <span class="text-muted-foreground">{row.classLabel}</span>
+      {:else if col.key === 'religion'}
+        <span class="text-muted-foreground">{row.religion ?? '-'}</span>
+      {:else if col.key === 'actions'}
+        <div class="flex justify-end gap-1">
+          <Button variant="ghost" size="icon" onclick={() => openEdit(row)} title="Edit"><Pencil class="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" onclick={() => remove(row)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
+        </div>
+      {/if}
+    {/snippet}
+  </DataTable>
 {/if}
 
 {#if showModal}
