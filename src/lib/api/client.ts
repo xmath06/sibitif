@@ -80,7 +80,12 @@ export async function apiFetch<T = unknown>(
     if (ok) {
       res = await run(); // retry sekali dengan cookie baru
     } else {
-      if (typeof window !== 'undefined') window.location.href = '/login';
+      // Redirect penuh HANYA bila belum di /login. Saat sudah di /login
+      // (mis. initSession memanggil /auth/me), reload akan memicu loop:
+      // layout → initSession → 401 → refresh gagal → redirect → …
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
       throw new ApiError('Sesi berakhir, silakan login kembali', 401, 'UNAUTHORIZED');
     }
   }
@@ -130,7 +135,7 @@ export const api = {
     if (res.status === 401) {
       if (await doRefresh()) res = await run();
       else {
-        window.location.href = '/login';
+        if (window.location.pathname !== '/login') window.location.href = '/login';
         throw new ApiError('Sesi berakhir, silakan login kembali', 401, 'UNAUTHORIZED');
       }
     }
