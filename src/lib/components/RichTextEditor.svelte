@@ -11,10 +11,11 @@
   import TableCell from '@tiptap/extension-table-cell';
   import katex from 'katex';
   import 'mathlive';
-  import { ImageIcon, Loader2, Sigma, Bold, Italic, List, ListOrdered, Heading2, Table2, ChartLine } from 'lucide-svelte';
+  import { ImageIcon, Loader2, Sigma, Bold, Italic, List, ListOrdered, Heading2, Table2, ChartLine, Box } from 'lucide-svelte';
   import { api } from '$api/client';
   import Button from '$components/ui/Button.svelte';
   import GraphDialog from '$components/GraphDialog.svelte';
+  import GeometryDialog from '$components/GeometryDialog.svelte';
   import { cn } from '$lib/utils';
 
   // Node LaTeX atom: disimpan sebagai <span class="math-latex" data-latex="…">
@@ -100,6 +101,45 @@
     }
   });
 
+  // Node blok bangun geometri: disimpan sebagai <img data-geometry src="data:image/svg+xml;base64,…">
+  const GeometryNode = Node.create({
+    name: 'geometry',
+    group: 'block',
+    atom: true,
+    selectable: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        src: {
+          default: '',
+          parseHTML: (el) => el.getAttribute('src') || '',
+          renderHTML: (attrs) => ({ src: attrs.src })
+        },
+        alt: {
+          default: '',
+          parseHTML: (el) => el.getAttribute('alt') || '',
+          renderHTML: (attrs) => ({ alt: attrs.alt })
+        }
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'img[data-geometry]' }];
+    },
+    renderHTML({ node }) {
+      return ['img', mergeAttributes({ 'data-geometry': '', class: 'math-graph' }, node.attrs)];
+    },
+    addNodeView() {
+      return ({ node }) => {
+        const img = document.createElement('img');
+        img.className = 'math-graph max-h-72 w-auto';
+        img.setAttribute('data-geometry', '');
+        img.src = node.attrs.src || '';
+        img.alt = node.attrs.alt || 'Bangun geometri';
+        return { dom: img };
+      };
+    }
+  });
+
   let {
     value = '',
     placeholder = 'Tulis jawaban atau soal di sini…',
@@ -108,7 +148,8 @@
     minWordCount = null,
     maxWordCount = null,
     showFlash = true,
-    compact = false
+    compact = false,
+    allowFigures = true
   }: {
     value?: string;
     placeholder?: string;
@@ -120,6 +161,9 @@
     // Mode ringkas untuk opsi jawaban: toolbar dibatasi (tebal/miring/rumus),
     // tanpa tabel/gambar/list/judul, tinggi kecil.
     compact?: boolean;
+    // Izinkan sisipan grafik & bangun geometri. Default true (bank soal).
+    // False untuk editor jawaban siswa.
+    allowFigures?: boolean;
   } = $props();
 
   let el: HTMLDivElement;
@@ -129,6 +173,7 @@
   let mathOpen = $state(false);
   let mathField = $state<any>(null);
   let graphOpen = $state(false);
+  let geometryOpen = $state(false);
   let tableActive = $state(false);
   let saveFlash = $state<'idle' | 'saving' | 'saved'>('idle');
   let wordCount = $state(0);
@@ -207,6 +252,11 @@
     editor.chain().focus().insertContent({ type: 'graph', attrs: { src, alt } }).run();
   }
 
+  function insertGeometry(src: string, alt: string) {
+    if (!editor) return;
+    editor.chain().focus().insertContent({ type: 'geometry', attrs: { src, alt } }).run();
+  }
+
   onMount(() => {
     editor = new Editor({
       element: el,
@@ -221,7 +271,8 @@
         TableHeader,
         TableCell,
         MathNode,
-        GraphNode
+        GraphNode,
+        GeometryNode
       ],
       content: value,
       onUpdate: ({ editor }) => {
@@ -283,9 +334,12 @@
       <Button variant="ghost" size="icon" onclick={openMath} title="Sisipkan rumus (MathLive)">
         <Sigma class="h-4 w-4" />
       </Button>
-      {#if !compact}
+      {#if allowFigures}
       <Button variant="ghost" size="icon" onclick={() => (graphOpen = true)} title="Sisipkan grafik fungsi f(x)">
         <ChartLine class="h-4 w-4" />
+      </Button>
+      <Button variant="ghost" size="icon" onclick={() => (geometryOpen = true)} title="Sisipkan bangun geometri 2D/3D">
+        <Box class="h-4 w-4" />
       </Button>
       {/if}
       {#if !compact}
@@ -339,4 +393,5 @@
   {/if}
 
   <GraphDialog open={graphOpen} onClose={() => (graphOpen = false)} onInsert={insertGraph} />
+  <GeometryDialog open={geometryOpen} onClose={() => (geometryOpen = false)} onInsert={insertGeometry} />
 </div>

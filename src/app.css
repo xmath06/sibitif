@@ -108,6 +108,16 @@ math-field:focus-within {
   font-weight: 600;
 }
 
+/* Grafik & bangun geometri (img data-uri) di konten soal/jawaban */
+.html-content img.math-graph,
+.rich-editor .ProseMirror img.math-graph {
+  max-width: 100%;
+  height: auto;
+  max-height: 20rem;
+  display: block;
+  margin: 0.5rem auto;
+}
+
 /* Tabel di dalam editor Tiptap */
 .rich-editor .ProseMirror table {
   width: 100%;

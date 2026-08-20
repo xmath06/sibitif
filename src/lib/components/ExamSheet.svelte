@@ -335,6 +335,7 @@
                     minWordCount={currentQuestion.minWordCount ?? null}
                     maxWordCount={currentQuestion.maxWordCount ?? null}
                     showFlash={false}
+                    allowFigures={false}
                   />
                 {/key}
                 {#if currentQuestion.minWordCount || currentQuestion.maxWordCount}
