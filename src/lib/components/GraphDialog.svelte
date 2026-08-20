@@ -24,6 +24,7 @@
   let autoY = $state(true);
   let showGrid = $state(true);
   let showLabels = $state(true);
+  let xUnit = $state<'rad' | 'deg'>('rad');
 
   const errors = $derived(funcs.map((fn) => validateExpression(fn.expr)));
 
@@ -38,7 +39,8 @@
         yMin: autoY ? null : yMin,
         yMax: autoY ? null : yMax,
         showGrid,
-        showLabels
+        showLabels,
+        xUnit
       });
     } catch {
       return '';
@@ -76,8 +78,13 @@
       xMax = 3;
     } else if (kind === 'sine') {
       funcs = mk(['f'], ['sin(x)']);
-      xMin = -6.28;
-      xMax = 6.28;
+      if (xUnit === 'deg') {
+        xMin = -360;
+        xMax = 360;
+      } else {
+        xMin = -6.28;
+        xMax = 6.28;
+      }
     } else if (kind === 'reciprocal') {
       funcs = mk(['f'], ['1/x']);
       xMin = -5;
@@ -219,6 +226,10 @@
           <label class="flex items-center gap-2 text-sm">
             <input type="checkbox" bind:checked={showLabels} class="h-4 w-4 rounded border-border accent-primary" />
             Label persamaan di ujung kurva
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={xUnit === 'deg'} onchange={(e) => (xUnit = (e.currentTarget as HTMLInputElement).checked ? 'deg' : 'rad')} class="h-4 w-4 rounded border-border accent-primary" />
+            Sumbu x dalam derajat (trigonometri)
           </label>
         </div>
 

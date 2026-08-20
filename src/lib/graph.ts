@@ -86,7 +86,7 @@ function tokenize(input: string): Token[] {
 
 class Parser {
   private pos = 0;
-  constructor(private tokens: Token[]) {}
+  constructor(private tokens: Token[], private deg = false) {}
 
   private peek(): Token {
     return this.tokens[this.pos];
@@ -199,6 +199,15 @@ class Parser {
         const arg = this.parseExpr();
         this.expect('rp');
         const fn = FUNCS[id];
+        if (this.deg) {
+          // Mode derajat: sin/cos/tan terima input °→rad, invers menghasilkan °
+          if (id === 'asin' || id === 'acos' || id === 'atan') {
+            return (x) => (fn(arg(x)) * 180) / Math.PI;
+          }
+          if (id === 'sin' || id === 'cos' || id === 'tan') {
+            return (x) => fn((arg(x) * Math.PI) / 180);
+          }
+        }
         return (x) => fn(arg(x));
       }
       throw new Error(`Nama tidak dikenal: "${id}"`);
@@ -221,10 +230,11 @@ class Parser {
   }
 }
 
-/** Kompilasi string ekspresi menjadi fungsi numerik f(x). Melempar Error bila sintaks salah. */
-export function compileExpression(expression: string): (x: number) => number {
+/** Kompilasi string ekspresi menjadi fungsi numerik f(x). Melempar Error bila sintaks salah.
+ *  `degrees` = true → argumen sin/cos/tan ditafsirkan derajat, hasil asin/acos/atan juga derajat. */
+export function compileExpression(expression: string, degrees = false): (x: number) => number {
   const tokens = tokenize(expression);
-  const parser = new Parser(tokens);
+  const parser = new Parser(tokens, degrees);
   return parser.parse();
 }
 
@@ -253,6 +263,7 @@ export interface GraphOptions {
   yMax?: number | null;
   showGrid?: boolean;
   showLabels?: boolean;
+  xUnit?: 'rad' | 'deg';
   width?: number;
   height?: number;
 }
@@ -268,6 +279,16 @@ function niceStep(range: number, targetSteps: number): number {
   return 10 * mag;
 }
 
+// Step derajat "bersih" untuk trigonometri: 30°, 45°, 60°, 90°, 180°, 360°, dst.
+function niceDegreeStep(range: number, targetSteps: number): number {
+  if (!(range > 0)) return 30;
+  const cands = [15, 30, 45, 60, 90, 180, 360, 720];
+  for (const c of cands) {
+    if (range / c <= targetSteps) return c;
+  }
+  return 720;
+}
+
 function fmt(v: number): string {
   if (Object.is(v, -0)) v = 0;
   const r = Math.round(v * 1e6) / 1e6;
@@ -278,37 +299,69 @@ function fmt(v: number): string {
 const CURVE_COLORS = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#0d9488'];
 const DEFAULT_NAMES = ['f', 'g', 'h', 'p', 'q', 'r'];
 
-// Konversi ekspresi "x^2-4" → markup SVG text dengan superskrip untuk pangkat:
-// "x² - 4" (angka/kelompok pangkat dinaikkan & diperkecil). Juga ubah * → ·.
-function svgExpr(expr: string): string {
-  let out = '';
+function escXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+interface Run { text: string; sup?: boolean; italic?: boolean }
+
+// Uraikan ekspresi "x^2-4" → segmen; pangkat ditandai `sup` (dan * → ·).
+function parseExprRuns(expr: string): Run[] {
+  const runs: Run[] = [];
+  let buf = '';
+  const flush = () => {
+    if (buf) {
+      runs.push({ text: buf });
+      buf = '';
+    }
+  };
   let i = 0;
   while (i < expr.length) {
     const c = expr[i];
     if (c === '^') {
-      // cari pangkat: angka | huruf | (kelompok)
       const rest = expr.slice(i + 1);
       const m = rest.match(/^(-?\d+(?:\.\d+)?|[a-zA-Z]|\([^()]*\))/);
       if (m) {
+        flush();
         const sup = m[1].startsWith('(') ? m[1].slice(1, -1) : m[1];
-        out += `<tspan dy="-4" font-size="0.7em">${sup}</tspan>`;
+        runs.push({ text: sup, sup: true });
         i += 1 + m[1].length;
         continue;
       }
-      out += '^';
+      buf += '^';
       i++;
       continue;
     }
     if (c === '*') {
-      out += '·';
+      buf += '·';
       i++;
       continue;
     }
-    if (c === '&') out += '&amp;';
-    else if (c === '<') out += '&lt;';
-    else if (c === '>') out += '&gt;';
-    else out += c;
+    buf += c;
     i++;
+  }
+  flush();
+  return runs;
+}
+
+// Bangun markup <text> dari segmen. SETIAP superskrip digeser naik (-0.35em) dan
+// segmen berikutnya wajib digeser turun (+0.35em) agar baseline kembali normal
+// (tanpa ini, teks setelah pangkat/invers ikut terangkat — bug lama).
+function svgRuns(runs: Run[]): string {
+  let out = '';
+  let raised = false;
+  for (const r of runs) {
+    const style = r.italic ? ' font-style="italic"' : '';
+    const body = escXml(r.text);
+    if (r.sup) {
+      out += `<tspan dy="-0.35em" font-size="0.7em"${style}>${body}</tspan>`;
+      raised = true;
+    } else if (raised) {
+      out += `<tspan dy="0.35em"${style}>${body}</tspan>`;
+      raised = false;
+    } else {
+      out += `<tspan${style}>${body}</tspan>`;
+    }
   }
   return out;
 }
@@ -316,12 +369,14 @@ function svgExpr(expr: string): string {
 // Label lengkap dengan notasi fungsi: "f(x) = x+2" atau "f⁻¹(x) = …"
 function functionLabel(fn: GraphFunction, idx: number): { markup: string; plain: string } {
   const name = fn.name && fn.name.trim() ? fn.name.trim() : DEFAULT_NAMES[idx % DEFAULT_NAMES.length];
-  const inv = fn.inverse
-    ? `<tspan dy="-4" font-size="0.7em">-1</tspan>`
-    : '';
+  const runs: Run[] = [
+    { text: name, italic: true },
+    ...(fn.inverse ? [{ text: '-1', sup: true }] : []),
+    { text: '(x) = ' },
+    ...parseExprRuns(fn.expr)
+  ];
   const plainName = fn.inverse ? `${name}⁻¹` : name;
-  const markup = `<tspan font-style="italic">${name}</tspan>${inv}(x) = ${svgExpr(fn.expr)}`;
-  return { markup, plain: `${plainName}(x) = ${fn.expr}` };
+  return { markup: svgRuns(runs), plain: `${plainName}(x) = ${fn.expr}` };
 }
 
 // Label persamaan di ujung kurva (kanan bawah/atas dari titik akhir).
@@ -353,9 +408,11 @@ export function renderFunctionGraph(opts: GraphOptions): string {
   const plotH = H - margin.t - margin.b;
   const showGrid = opts.showGrid ?? true;
   const showLabels = opts.showLabels ?? true;
+  const xUnit: 'rad' | 'deg' = opts.xUnit ?? 'rad';
+  const degMode = xUnit === 'deg';
 
   const funcs = opts.functions.filter((f) => f.expr.trim().length > 0);
-  const fns = funcs.map((f) => compileExpression(f.expr));
+  const fns = funcs.map((f) => compileExpression(f.expr, degMode));
   const xMin = opts.xMin;
   const xMax = opts.xMax;
 
@@ -406,13 +463,19 @@ export function renderFunctionGraph(opts: GraphOptions): string {
 
   // Garis bantu & label sumbu (angka di tepi)
   if (showGrid) {
-    const xStep = niceStep(xMax - xMin, Math.max(8, Math.floor(plotW / 60)));
+    // Step sumbu-x: dalam derajat pilih nilai "bersih" (30/45/60/90/180) agar label trig rapi.
+    let xStep: number;
+    if (degMode) {
+      xStep = niceDegreeStep(xMax - xMin, Math.max(8, Math.floor(plotW / 60)));
+    } else {
+      xStep = niceStep(xMax - xMin, Math.max(8, Math.floor(plotW / 60)));
+    }
     const yStep = niceStep(yMax - yMin, Math.max(8, Math.floor(plotH / 45)));
-    for (let x = Math.ceil(xMin / xStep) * xStep; x <= xMax; x += xStep) {
+    for (let x = Math.ceil(xMin / xStep) * xStep; x <= xMax + xStep / 100; x += xStep) {
       if (Math.abs(x) < xStep / 100) continue; // skip sumbu y
       const px = sx(x);
       parts.push(`<line class="grid" x1="${fmt(px)}" y1="${margin.t}" x2="${fmt(px)}" y2="${margin.t + plotH}"/>`);
-      parts.push(`<text class="tick" x="${fmt(px)}" y="${margin.t + plotH + 18}" text-anchor="middle">${fmt(x)}</text>`);
+      parts.push(`<text class="tick" x="${fmt(px)}" y="${margin.t + plotH + 18}" text-anchor="middle">${degMode ? fmt(x) + '°' : fmt(x)}</text>`);
     }
     for (let y = Math.ceil(yMin / yStep) * yStep; y <= yMax; y += yStep) {
       if (Math.abs(y) < yStep / 100) continue; // skip sumbu x
