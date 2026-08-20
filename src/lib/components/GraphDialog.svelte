@@ -135,7 +135,7 @@
     onclick={(e) => e.target === e.currentTarget && onClose()}
     onkeydown={(e) => e.key === 'Escape' && onClose()}
   >
-    <div class="w-full max-w-2xl rounded-2xl bg-card p-5 shadow-xl animate-fade-in">
+    <div class="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-card p-5 shadow-xl animate-fade-in">
       <div class="mb-4 flex items-center justify-between">
         <h3 class="text-sm font-semibold text-foreground">Grafik Fungsi</h3>
         <button onclick={onClose} class="text-muted-foreground hover:text-foreground"><X class="h-5 w-5" /></button>
