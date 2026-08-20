@@ -287,8 +287,7 @@ export function renderFunctionGraph(opts: GraphOptions): string {
   let yMin = opts.yMin ?? null;
   let yMax = opts.yMax ?? null;
   if (yMin == null || yMax == null) {
-    let lo = Infinity;
-    let hi = -Infinity;
+    const ys: number[] = [];
     const N = 500;
     for (let i = 0; i <= N; i++) {
       const x = xMin + ((xMax - xMin) * i) / N;
@@ -298,12 +297,16 @@ export function renderFunctionGraph(opts: GraphOptions): string {
       } catch {
         continue;
       }
-      if (Number.isFinite(y)) {
-        if (y < lo) lo = y;
-        if (y > hi) hi = y;
-      }
+      if (Number.isFinite(y)) ys.push(y);
     }
-    if (!Number.isFinite(lo)) {
+    // Klip outlier (persentil 2–98) agar asimtot (mis. 1/x) tidak merusak skala.
+    let lo: number;
+    let hi: number;
+    if (ys.length) {
+      const sorted = [...ys].sort((a, b) => a - b);
+      lo = sorted[Math.floor(sorted.length * 0.02)] ?? sorted[0];
+      hi = sorted[Math.floor(sorted.length * 0.98)] ?? sorted[sorted.length - 1];
+    } else {
       lo = -10;
       hi = 10;
     }
@@ -353,8 +356,14 @@ export function renderFunctionGraph(opts: GraphOptions): string {
     parts.push(`<polygon points="${fmt(x0)},${fmt(margin.t)} ${fmt(x0 - 4)},${fmt(margin.t + 9)} ${fmt(x0 + 4)},${fmt(margin.t + 9)}" fill="#0f172a"/>`);
   }
 
-  // Kurva: sampling + putus di titik non-finite / lompatan besar
+  // Kurva: sampling + putus polyline di titik non-finite / di luar rentang / lompatan besar
   const points: string[] = [];
+  const flush = () => {
+    if (points.length) {
+      parts.push(`<polyline class="curve" points="${points.join(' ')}"/>`);
+      points.length = 0;
+    }
+  };
   const N = 800;
   let prevY: number | null = null;
   for (let i = 0; i <= N; i++) {
@@ -363,28 +372,25 @@ export function renderFunctionGraph(opts: GraphOptions): string {
     try {
       y = f(x);
     } catch {
+      flush();
       prevY = null;
       continue;
     }
     if (!Number.isFinite(y) || y < yMin - (yMax - yMin) * 2 || y > yMax + (yMax - yMin) * 2) {
+      // keluar jangkauan (mis. mendekati asimtot) → akhiri segmen
+      flush();
       prevY = null;
       continue;
     }
     const px = sx(x);
     const py = sy(Math.max(yMin, Math.min(yMax, y)));
     if (prevY != null && Math.abs(y - prevY) > (yMax - yMin) * 4) {
-      // lompatan asimtot → putus polyline
-      if (points.length) {
-        parts.push(`<polyline class="curve" points="${points.join(' ')}"/>`);
-        points.length = 0;
-      }
+      flush();
     }
     points.push(`${fmt(px)},${fmt(py)}`);
     prevY = y;
   }
-  if (points.length) {
-    parts.push(`<polyline class="curve" points="${points.join(' ')}"/>`);
-  }
+  flush();
 
   parts.push('</svg>');
   return parts.join('');
