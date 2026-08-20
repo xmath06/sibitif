@@ -11,9 +11,10 @@
   import TableCell from '@tiptap/extension-table-cell';
   import katex from 'katex';
   import 'mathlive';
-  import { ImageIcon, Loader2, Sigma, Bold, Italic, List, ListOrdered, Heading2, Table2 } from 'lucide-svelte';
+  import { ImageIcon, Loader2, Sigma, Bold, Italic, List, ListOrdered, Heading2, Table2, ChartLine } from 'lucide-svelte';
   import { api } from '$api/client';
   import Button from '$components/ui/Button.svelte';
+  import GraphDialog from '$components/GraphDialog.svelte';
   import { cn } from '$lib/utils';
 
   // Node LaTeX atom: disimpan sebagai <span class="math-latex" data-latex="…">
@@ -59,6 +60,46 @@
     }
   });
 
+  // Node blok grafik fungsi: disimpan sebagai <img data-graph src="data:image/svg+xml;base64,…">
+  // agar self-contained di questionText (render di editor, halaman soal, dan ekspor docx → [gambar]).
+  const GraphNode = Node.create({
+    name: 'graph',
+    group: 'block',
+    atom: true,
+    selectable: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        src: {
+          default: '',
+          parseHTML: (el) => el.getAttribute('src') || '',
+          renderHTML: (attrs) => ({ src: attrs.src })
+        },
+        alt: {
+          default: '',
+          parseHTML: (el) => el.getAttribute('alt') || '',
+          renderHTML: (attrs) => ({ alt: attrs.alt })
+        }
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'img[data-graph]' }];
+    },
+    renderHTML({ node }) {
+      return ['img', mergeAttributes({ 'data-graph': '', class: 'math-graph' }, node.attrs)];
+    },
+    addNodeView() {
+      return ({ node }) => {
+        const img = document.createElement('img');
+        img.className = 'math-graph max-h-72 w-auto';
+        img.setAttribute('data-graph', '');
+        img.src = node.attrs.src || '';
+        img.alt = node.attrs.alt || 'Grafik';
+        return { dom: img };
+      };
+    }
+  });
+
   let {
     value = '',
     placeholder = 'Tulis jawaban atau soal di sini…',
@@ -87,6 +128,7 @@
   let imgInput: HTMLInputElement;
   let mathOpen = $state(false);
   let mathField = $state<any>(null);
+  let graphOpen = $state(false);
   let tableActive = $state(false);
   let saveFlash = $state<'idle' | 'saving' | 'saved'>('idle');
   let wordCount = $state(0);
@@ -160,6 +202,11 @@
     mathOpen = false;
   }
 
+  function insertGraph(src: string, alt: string) {
+    if (!editor) return;
+    editor.chain().focus().insertContent({ type: 'graph', attrs: { src, alt } }).run();
+  }
+
   onMount(() => {
     editor = new Editor({
       element: el,
@@ -173,7 +220,8 @@
         TableRow,
         TableHeader,
         TableCell,
-        MathNode
+        MathNode,
+        GraphNode
       ],
       content: value,
       onUpdate: ({ editor }) => {
@@ -236,6 +284,11 @@
         <Sigma class="h-4 w-4" />
       </Button>
       {#if !compact}
+      <Button variant="ghost" size="icon" onclick={() => (graphOpen = true)} title="Sisipkan grafik fungsi f(x)">
+        <ChartLine class="h-4 w-4" />
+      </Button>
+      {/if}
+      {#if !compact}
       <Button variant="ghost" size="icon" onclick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} title="Sisipkan tabel 3×3">
         <Table2 class="h-4 w-4" />
       </Button>
@@ -284,4 +337,6 @@
       </div>
     </div>
   {/if}
+
+  <GraphDialog open={graphOpen} onClose={() => (graphOpen = false)} onInsert={insertGraph} />
 </div>
