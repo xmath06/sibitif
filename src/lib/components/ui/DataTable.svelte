@@ -51,17 +51,26 @@
   const sorted = $derived.by(() => {
     if (!sortKey) return filtered;
     const arr = [...filtered];
+    const toNum = (v: unknown): number => {
+      if (typeof v === 'number') return v;
+      const s = String(v ?? '').trim();
+      // Number("") === 0, bukan NaN → harus dicek manual agar teks
+      // (nama/username/agama) tidak semuanya jatuh ke 0 (sort tidak berfungsi).
+      if (s === '') return NaN;
+      return Number(s);
+    };
     arr.sort((a, b) => {
       const va = a?.[sortKey];
       const vb = b?.[sortKey];
-      const na = typeof va === 'number' ? va : Number(String(va ?? '').replace(/[^\d.-]/g, ''));
-      const nb = typeof vb === 'number' ? vb : Number(String(vb ?? '').replace(/[^\d.-]/g, ''));
-      let cmp: number;
+      const na = toNum(va);
+      const nb = toNum(vb);
       if (!isNaN(na) && !isNaN(nb)) {
-        cmp = na - nb;
-      } else {
-        cmp = String(va ?? '').localeCompare(String(vb ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+        return sortDir === 'asc' ? na - nb : nb - na;
       }
+      const cmp = String(va ?? '').localeCompare(String(vb ?? ''), undefined, {
+        numeric: true,
+        sensitivity: 'base'
+      });
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return arr;
