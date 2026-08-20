@@ -84,9 +84,9 @@
   onMount(async () => {
     try {
       const [pres, cres, sres] = await Promise.all([
-        api.get('/packages'),
+        api.get('/packages', { limit: 10000 }),
         api.get('/classes'),
-        api.get('/teacher/students'),
+        api.get('/teacher/students', { limit: 10000 }),
       ]);
       packages = ((pres as any).data ?? []).map((p: any) => ({ id: p.id, title: p.title, subject: p.subject }));
       classes = (cres as any).data ?? cres ?? [];

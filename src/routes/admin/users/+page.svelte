@@ -42,7 +42,7 @@
     error = '';
     try {
       const [ur, cr] = await Promise.all([
-        api.get<{ data: SafeUser[]; pagination: unknown }>('/users'),
+        api.get<{ data: SafeUser[]; pagination: unknown }>('/users', { limit: 10000 }),
         api.get('/classes')
       ]);
       users = ((ur as any).data ?? []) as SafeUser[];

@@ -46,7 +46,7 @@
   let formErr = $state('');
 
   async function loadSubjects() {
-    const res = await api.get<{ data: Subject[] }>('/subjects');
+    const res = await api.get<{ data: Subject[] }>('/subjects', { limit: 10000 });
     subjects = ((res as any).data ?? []) as Subject[];
   }
   async function loadQuestions() {

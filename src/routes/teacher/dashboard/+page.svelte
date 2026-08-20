@@ -17,7 +17,7 @@
 
   onMount(async () => {
     try {
-      const res = await api.get<{ success: boolean; data: Sched[] }>('/schedules');
+      const res = await api.get<{ success: boolean; data: Sched[] }>('/schedules', { limit: 10000 });
       schedules = (res as any).data ?? [];
     } finally {
       loading = false;

@@ -22,8 +22,8 @@
     loading = true; error = '';
     try {
       const [sr, pr] = await Promise.all([
-        api.get<{ data: Sched[] }>('/schedules'),
-        api.get<{ data: any[] }>('/packages')
+        api.get<{ data: Sched[] }>('/schedules', { limit: 10000 }),
+        api.get<{ data: any[] }>('/packages', { limit: 10000 })
       ]);
       schedules = ((sr as any).data ?? []) as Sched[];
       packages = ((pr as any).data ?? []) as any[];

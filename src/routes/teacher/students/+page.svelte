@@ -37,7 +37,7 @@
     error = '';
     try {
       const [sr, cr] = await Promise.all([
-        api.get<{ data: SafeUser[] }>('/teacher/students'),
+        api.get<{ data: SafeUser[] }>('/teacher/students', { limit: 10000 }),
         api.get('/classes')
       ]);
       students = ((sr as any).data ?? []) as SafeUser[];

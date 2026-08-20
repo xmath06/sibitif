@@ -28,7 +28,7 @@
   async function load() {
     loading = true; error = '';
     try {
-      const res = await api.get<{ data: Subject[] }>('/subjects');
+      const res = await api.get<{ data: Subject[] }>('/subjects', { limit: 10000 });
       subjects = ((res as any).data ?? []) as Subject[];
     } catch (e) { error = e instanceof ApiError ? e.message : 'Gagal memuat'; }
     finally { loading = false; }

@@ -46,8 +46,8 @@
     loading = true; error = '';
     try {
       const [pr, sr] = await Promise.all([
-        api.get<{ data: Pkg[] }>('/packages'),
-        api.get<{ data: Subject[] }>('/subjects')
+        api.get<{ data: Pkg[] }>('/packages', { limit: 10000 }),
+        api.get<{ data: Subject[] }>('/subjects', { limit: 10000 })
       ]);
       packages = ((pr as any).data ?? []) as Pkg[];
       subjects = ((sr as any).data ?? []) as Subject[];
