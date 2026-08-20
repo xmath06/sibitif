@@ -342,6 +342,18 @@ function bounds(pts: Pt[], radius?: number): { minX: number; maxX: number; minY:
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
+// Pusat rata-rata dari sekumpulan titik (untuk arah label menjauh dari bangun).
+function centroid(pts: Pt[]): Pt {
+  if (!pts.length) return { x: 0, y: 0 };
+  let x = 0;
+  let y = 0;
+  for (const p of pts) {
+    x += p.x;
+    y += p.y;
+  }
+  return { x: x / pts.length, y: y / pts.length };
+}
+
 export interface GeometryItem {
   shapeId: string;
   params: Record<string, number>;
@@ -434,13 +446,32 @@ function renderItemInner(
       const labelTargets = def.kind === '2d' ? shape.pts : allPts;
       const labelN = def.kind === '3d' ? Math.min(labelTargets.length, def.id === 'tri_prism' || def.id === 'pyramid' ? 6 : 8) : labelTargets.length;
       const startIdx = Math.max(0, LETTERS.indexOf(labelStart.toUpperCase()));
+      // Label diletakkan "menjauh dari centroid" agar tidak menimpa garis bangun.
+      // Untuk titik yang berimpit dengan centroid (mis. pusat), gunakan offset diagonal tetap.
+      const cx = centroid(labelTargets).x;
+      const cy = centroid(labelTargets).y;
       for (let i = 0; i < labelN; i++) {
         const pt = labelTargets[i];
         if (!pt) continue;
         const letter = LETTERS[startIdx + i] ?? `P${i + 1}`;
         parts.push(`<circle class="pt" cx="${fmt(sx(pt.x))}" cy="${fmt(sy(pt.y))}" r="2.5"/>`);
-        const dy = i === 0 ? -10 : 10;
-        parts.push(`<text class="lbl" x="${fmt(sx(pt.x) + 4)}" y="${fmt(sy(pt.y) + dy)}">${letter}</text>`);
+        let vx = sx(pt.x) - sx(cx);
+        let vy = sy(pt.y) - sy(cy);
+        const len = Math.hypot(vx, vy);
+        if (len < 1e-6) {
+          // titik tepat di centroid (mis. limas tegak): geser diagonal agar tidak menimpa
+          vx = 14;
+          vy = -14;
+        } else {
+          vx = (vx / len) * 18;
+          vy = (vy / len) * 18;
+        }
+        let anchor = 'middle';
+        if (vx > 6) anchor = 'start';
+        else if (vx < -6) anchor = 'end';
+        parts.push(
+          `<text class="lbl" x="${fmt(sx(pt.x) + vx)}" y="${fmt(sy(pt.y) + vy + 4)}" text-anchor="${anchor}">${letter}</text>`
+        );
       }
     }
   }
@@ -448,9 +479,15 @@ function renderItemInner(
   // Panjang sisi
   if (showSides) {
     const drawDim = (a: Pt, b: Pt, value: number) => {
-      const mx = sx((a.x + b.x) / 2);
-      const my = sy((a.y + b.y) / 2);
-      parts.push(`<text class="dimlabel" x="${fmt(mx)}" y="${fmt(my - 5)}" text-anchor="middle">${fmtLen(value)}</text>`);
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      // offset tegak lurus sisi agar angka tidak menimpa garis
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dl = Math.hypot(dx, dy) || 1;
+      const ox = (-dy / dl) * 12;
+      const oy = (dx / dl) * 12;
+      parts.push(`<text class="dimlabel" x="${fmt(sx(mx) + ox)}" y="${fmt(sy(my) + oy + 4)}" text-anchor="middle">${fmtLen(value)}</text>`);
     };
     if (def.kind === '2d' && shape.pts.length >= 2) {
       for (let i = 0; i < shape.pts.length; i++) {
