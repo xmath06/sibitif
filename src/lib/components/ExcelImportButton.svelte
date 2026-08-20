@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Download, Upload, AlertCircle, CheckCircle2 } from 'lucide-svelte';
+  import { Download, Upload, AlertCircle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-svelte';
   import Button from '$components/ui/Button.svelte';
   import { readExcelFile, downloadExcelTemplate } from '$lib/excel';
   import type { ExcelRow } from '$lib/excel';
@@ -21,6 +21,7 @@
 
   let busy = $state(false);
   let result = $state<ImportResult | null>(null);
+  let detailOpen = $state(true);
   let fileInput: HTMLInputElement;
 
   async function handleFile(e: Event) {
@@ -28,6 +29,7 @@
     if (!f) return;
     busy = true;
     result = null;
+    detailOpen = true;
     try {
       const rows = await readExcelFile(f);
       result = await onImport(rows);
@@ -44,21 +46,44 @@
   }
 </script>
 
-<div class="flex flex-wrap items-center gap-2">
-  <Button variant="outline" size="sm" type="button" disabled={busy} title={label} onclick={() => fileInput?.click()}>
-    {#if busy}<span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />{:else}<Upload class="h-4 w-4" />{/if}
-    {label}
-  </Button>
-  <input bind:this={fileInput} class="hidden" type="file" accept=".xlsx,.xls,.csv" onchange={handleFile} />
-  {#if templateHeaders.length}
-    <Button variant="ghost" size="sm" type="button" onclick={dlTemplate} title="Unduh template">
-      <Download class="h-4 w-4" /> Template
+<div class="space-y-2">
+  <div class="flex flex-wrap items-center gap-2">
+    <Button variant="outline" size="sm" type="button" disabled={busy} title={label} onclick={() => fileInput?.click()}>
+      {#if busy}<span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />{:else}<Upload class="h-4 w-4" />{/if}
+      {label}
     </Button>
-  {/if}
-  {#if result}
-    <span class="inline-flex items-center gap-1 text-xs {result.failed ? 'text-rose-600' : 'text-emerald-600'}">
-      {#if result.failed}<AlertCircle class="h-3.5 w-3.5" />{:else}<CheckCircle2 class="h-3.5 w-3.5" />{/if}
-      {result.ok} berhasil{result.failed ? `, ${result.failed} gagal` : ''}
-    </span>
+    <input bind:this={fileInput} class="hidden" type="file" accept=".xlsx,.xls,.csv" onchange={handleFile} />
+    {#if templateHeaders.length}
+      <Button variant="ghost" size="sm" type="button" onclick={dlTemplate} title="Unduh template">
+        <Download class="h-4 w-4" /> Template
+      </Button>
+    {/if}
+    {#if result}
+      <span class="inline-flex items-center gap-1 text-xs {result.failed ? 'text-rose-600' : 'text-emerald-600'}">
+        {#if result.failed}<AlertCircle class="h-3.5 w-3.5" />{:else}<CheckCircle2 class="h-3.5 w-3.5" />{/if}
+        {result.ok} berhasil{result.failed ? `, ${result.failed} gagal` : ''}
+      </span>
+      {#if result.failed}
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          onclick={() => (detailOpen = !detailOpen)}
+        >
+          {#if detailOpen}<ChevronUp class="h-3.5 w-3.5" />{:else}<ChevronDown class="h-3.5 w-3.5" />{/if}
+          Rincian
+        </button>
+      {/if}
+    {/if}
+  </div>
+
+  {#if result?.failed && detailOpen}
+    <div class="max-w-2xl rounded-lg border border-rose-200 bg-rose-50/60 p-3">
+      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-rose-700">Alasan gagal</p>
+      <ul class="space-y-1">
+        {#each result.errors as err, i (i)}
+          <li class="text-xs text-rose-700">{err}</li>
+        {/each}
+      </ul>
+    </div>
   {/if}
 </div>
