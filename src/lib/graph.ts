@@ -239,8 +239,14 @@ export function validateExpression(expression: string): { ok: boolean; message?:
   }
 }
 
+export interface GraphFunction {
+  expr: string;
+  name?: string; // huruf fungsi, default f/g/h…
+  inverse?: boolean; // tampilkan notasi f⁻¹(x)
+}
+
 export interface GraphOptions {
-  expressions: string[];
+  functions: GraphFunction[];
   xMin: number;
   xMax: number;
   yMin?: number | null;
@@ -270,12 +276,58 @@ function fmt(v: number): string {
 
 // Warna kurva (siklus bila fungsi lebih banyak).
 const CURVE_COLORS = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#0d9488'];
+const DEFAULT_NAMES = ['f', 'g', 'h', 'p', 'q', 'r'];
+
+// Konversi ekspresi "x^2-4" → markup SVG text dengan superskrip untuk pangkat:
+// "x² - 4" (angka/kelompok pangkat dinaikkan & diperkecil). Juga ubah * → ·.
+function svgExpr(expr: string): string {
+  let out = '';
+  let i = 0;
+  while (i < expr.length) {
+    const c = expr[i];
+    if (c === '^') {
+      // cari pangkat: angka | huruf | (kelompok)
+      const rest = expr.slice(i + 1);
+      const m = rest.match(/^(-?\d+(?:\.\d+)?|[a-zA-Z]|\([^()]*\))/);
+      if (m) {
+        const sup = m[1].startsWith('(') ? m[1].slice(1, -1) : m[1];
+        out += `<tspan dy="-4" font-size="0.7em">${sup}</tspan>`;
+        i += 1 + m[1].length;
+        continue;
+      }
+      out += '^';
+      i++;
+      continue;
+    }
+    if (c === '*') {
+      out += '·';
+      i++;
+      continue;
+    }
+    if (c === '&') out += '&amp;';
+    else if (c === '<') out += '&lt;';
+    else if (c === '>') out += '&gt;';
+    else out += c;
+    i++;
+  }
+  return out;
+}
+
+// Label lengkap dengan notasi fungsi: "f(x) = x+2" atau "f⁻¹(x) = …"
+function functionLabel(fn: GraphFunction, idx: number): { markup: string; plain: string } {
+  const name = fn.name && fn.name.trim() ? fn.name.trim() : DEFAULT_NAMES[idx % DEFAULT_NAMES.length];
+  const inv = fn.inverse
+    ? `<tspan dy="-4" font-size="0.7em">-1</tspan>`
+    : '';
+  const plainName = fn.inverse ? `${name}⁻¹` : name;
+  const markup = `<tspan font-style="italic">${name}</tspan>${inv}(x) = ${svgExpr(fn.expr)}`;
+  return { markup, plain: `${plainName}(x) = ${fn.expr}` };
+}
 
 // Label persamaan di ujung kurva (kanan bawah/atas dari titik akhir).
-function curveLabel(expr: string, px: number, py: number, plotRight: number, plotBottom: number, color: string): string {
-  const text = expr;
+function curveLabel(markup: string, plain: string, px: number, py: number, plotRight: number, plotBottom: number, color: string): string {
   const fontSize = 13;
-  const w = text.length * 7 + 14;
+  const w = plain.length * 7 + 14;
   let x = px + 10;
   let y = py - 8;
   if (x + w > plotRight) x = plotRight - w;
@@ -283,7 +335,7 @@ function curveLabel(expr: string, px: number, py: number, plotRight: number, plo
   if (y > plotBottom) y = plotBottom;
   return (
     `<rect x="${fmt(x)}" y="${fmt(y - fontSize)}" width="${fmt(w)}" height="${fontSize + 8}" rx="5" fill="#ffffff" fill-opacity="0.85" stroke="#cbd5e1" stroke-width="0.5"/>` +
-    `<text x="${fmt(x + 7)}" y="${fmt(y - 2)}" font-family="Arial,sans-serif" font-size="${fontSize}" font-style="italic" fill="${color}">${text}</text>`
+    `<text x="${fmt(x + 7)}" y="${fmt(y - 2)}" font-family="Arial,sans-serif" font-size="${fontSize}" fill="${color}">${markup}</text>`
   );
 }
 
@@ -302,8 +354,8 @@ export function renderFunctionGraph(opts: GraphOptions): string {
   const showGrid = opts.showGrid ?? true;
   const showLabels = opts.showLabels ?? true;
 
-  const exprs = opts.expressions.filter((e) => e.trim().length > 0);
-  const fns = exprs.map((e) => compileExpression(e));
+  const funcs = opts.functions.filter((f) => f.expr.trim().length > 0);
+  const fns = funcs.map((f) => compileExpression(f.expr));
   const xMin = opts.xMin;
   const xMax = opts.xMax;
 
@@ -349,7 +401,7 @@ export function renderFunctionGraph(opts: GraphOptions): string {
   const sy = (y: number) => margin.t + plotH - ((y - yMin) / (yMax - yMin)) * plotH;
 
   const parts: string[] = [];
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Grafik ${exprs.join(' ; ')}">`);
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Grafik ${funcs.map((f) => f.expr).join(' ; ')}">`);
   parts.push(`<style>text{font-family:Arial,sans-serif;font-size:12px;fill:#334155}.grid{stroke:#e2e8f0;stroke-width:1}.axis{stroke:#0f172a;stroke-width:1.5}.curve{fill:none;stroke:#2563eb;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.tick{fill:#94a3b8}</style>`);
 
   // Garis bantu & label sumbu (angka di tepi)
@@ -425,8 +477,9 @@ export function renderFunctionGraph(opts: GraphOptions): string {
       prevY = y;
     }
     flush();
-    if (showLabels && exprs[idx]) {
-      parts.push(curveLabel(exprs[idx], lastPx, lastPy, plotRight, plotBottom, color));
+    if (showLabels) {
+      const lbl = functionLabel(funcs[idx], idx);
+      parts.push(curveLabel(lbl.markup, lbl.plain, lastPx, lastPy, plotRight, plotBottom, color));
     }
   });
 

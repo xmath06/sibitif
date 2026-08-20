@@ -13,7 +13,10 @@
     onInsert?: (src: string, alt: string) => void;
   } = $props();
 
-  let funcs = $state<string[]>(['x^2']);
+  interface Fn { expr: string; name: string; inverse: boolean }
+  const DEFAULT_LETTERS = ['f', 'g', 'h', 'p', 'q', 'r'];
+
+  let funcs = $state<Fn[]>([{ expr: 'x^2', name: 'f', inverse: false }]);
   let xMin = $state(-5);
   let xMax = $state(5);
   let yMin = $state(0);
@@ -22,14 +25,14 @@
   let showGrid = $state(true);
   let showLabels = $state(true);
 
-  const errors = $derived(funcs.map((e) => validateExpression(e)));
+  const errors = $derived(funcs.map((fn) => validateExpression(fn.expr)));
 
   const svg = $derived.by(() => {
-    const valid = funcs.some((e, i) => e.trim() && errors[i].ok);
+    const valid = funcs.some((fn, i) => fn.expr.trim() && errors[i].ok);
     if (!valid) return '';
     try {
       return renderFunctionGraph({
-        expressions: funcs,
+        functions: funcs,
         xMin,
         xMax,
         yMin: autoY ? null : yMin,
@@ -44,43 +47,62 @@
 
   const previewSrc = $derived(svg ? svgToDataUri(svg) : '');
 
-  const allValid = $derived(funcs.every((e, i) => e.trim() === '' || errors[i].ok));
+  const allValid = $derived(funcs.every((fn, i) => fn.expr.trim() === '' || errors[i].ok));
+
+  function setExpr(i: number, v: string) {
+    funcs = funcs.map((fn, idx) => (idx === i ? { ...fn, expr: v } : fn));
+  }
+  function setName(i: number, v: string) {
+    funcs = funcs.map((fn, idx) => (idx === i ? { ...fn, name: v } : fn));
+  }
+  function toggleInverse(i: number) {
+    funcs = funcs.map((fn, idx) => (idx === i ? { ...fn, inverse: !fn.inverse } : fn));
+  }
 
   function preset(kind: string) {
+    const mk = (letters: string[], exprs: string[]): Fn[] =>
+      exprs.map((expr, idx) => ({ expr, name: letters[idx] ?? DEFAULT_LETTERS[idx % DEFAULT_LETTERS.length], inverse: false }));
     if (kind === 'linear') {
-      funcs = ['2x+1'];
+      funcs = mk(['f'], ['2x+1']);
       xMin = -5;
       xMax = 5;
     } else if (kind === 'quadratic') {
-      funcs = ['x^2-4'];
+      funcs = mk(['f'], ['x^2-4']);
       xMin = -5;
       xMax = 5;
     } else if (kind === 'cubic') {
-      funcs = ['x^3-x'];
+      funcs = mk(['f'], ['x^3-x']);
       xMin = -3;
       xMax = 3;
     } else if (kind === 'sine') {
-      funcs = ['sin(x)'];
+      funcs = mk(['f'], ['sin(x)']);
       xMin = -6.28;
       xMax = 6.28;
     } else if (kind === 'reciprocal') {
-      funcs = ['1/x'];
+      funcs = mk(['f'], ['1/x']);
       xMin = -5;
       xMax = 5;
     } else if (kind === 'sqrt') {
-      funcs = ['sqrt(x)'];
+      funcs = mk(['f'], ['sqrt(x)']);
       xMin = 0;
       xMax = 10;
     } else if (kind === 'intersect') {
-      funcs = ['2x+1', 'x^2-4'];
+      funcs = mk(['f', 'g'], ['2x+1', 'x^2-4']);
       xMin = -5;
+      xMax = 5;
+    } else if (kind === 'inverse') {
+      // pasangan fungsi & inversnya (notasi f⁻¹, cukup contoh sederhana)
+      funcs = mk(['f', 'g'], ['x^2', 'sqrt(x)']);
+      xMin = 0;
       xMax = 5;
     }
     autoY = true;
   }
 
   function addFunc() {
-    funcs = [...funcs, 'x^2'];
+    const used = new Set(funcs.map((fn) => fn.name));
+    const letter = DEFAULT_LETTERS.find((l) => !used.has(l)) ?? `f${funcs.length + 1}`;
+    funcs = [...funcs, { expr: 'x^2', name: letter, inverse: false }];
   }
   function removeFunc(i: number) {
     funcs = funcs.filter((_, idx) => idx !== i);
@@ -88,7 +110,10 @@
 
   function insert() {
     if (!allValid || !previewSrc) return;
-    const joined = funcs.filter((e) => e.trim()).join(' ; ');
+    const joined = funcs
+      .filter((fn) => fn.expr.trim())
+      .map((fn) => `${fn.name}${fn.inverse ? '⁻¹' : ''}(x) = ${fn.expr}`)
+      .join(' ; ');
     onInsert(previewSrc, `Grafik ${joined}`);
     onClose();
   }
@@ -105,7 +130,7 @@
   >
     <div class="w-full max-w-2xl rounded-2xl bg-card p-5 shadow-xl animate-fade-in">
       <div class="mb-4 flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-foreground">Grafik Fungsi f(x)</h3>
+        <h3 class="text-sm font-semibold text-foreground">Grafik Fungsi</h3>
         <button onclick={onClose} class="text-muted-foreground hover:text-foreground"><X class="h-5 w-5" /></button>
       </div>
 
@@ -115,13 +140,21 @@
             <span class="text-sm font-medium">Fungsi (bisa lebih dari satu)</span>
             <Button variant="outline" size="sm" onclick={addFunc}><Plus class="h-3.5 w-3.5" /> Tambah fungsi</Button>
           </div>
-          {#each funcs as expr, i (i)}
-            <div class="flex items-center gap-2">
-              <span class="w-6 shrink-0 text-right text-sm text-muted-foreground">f{i + 1}(x) =</span>
+          {#each funcs as fn, i (i)}
+            <div class="flex flex-wrap items-center gap-2">
               <input
-                bind:value={funcs[i]}
+                bind:value={funcs[i].name}
+                oninput={(e) => setName(i, (e.currentTarget as HTMLInputElement).value)}
+                class="h-10 w-12 rounded-lg border border-border bg-card px-2 text-center text-sm outline-none focus:ring-2 focus:ring-ring"
+                title="Huruf fungsi (mis. f, g, h)"
+                maxlength="2"
+              />
+              <span class="text-sm text-muted-foreground">(x) =</span>
+              <input
+                bind:value={funcs[i].expr}
+                oninput={(e) => setExpr(i, (e.currentTarget as HTMLInputElement).value)}
                 placeholder="contoh: x^2-4, sin(x), 2x+1"
-                class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                class="h-10 min-w-0 flex-1 rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
               <Button
                 variant="ghost"
@@ -132,14 +165,20 @@
                 class="text-rose-600"
               ><Trash2 class="h-4 w-4" /></Button>
             </div>
-            {#if !errors[i].ok && expr.trim()}
-              <p class="-mt-1 text-xs text-rose-600">{errors[i].message}</p>
-            {/if}
+            <div class="flex items-center gap-4 pl-1">
+              {#if !errors[i].ok && fn.expr.trim()}
+                <span class="text-xs text-rose-600">{errors[i].message}</span>
+              {/if}
+              <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <input type="checkbox" checked={fn.inverse} onchange={() => toggleInverse(i)} class="h-3.5 w-3.5 rounded border-border accent-primary" />
+                Invers ({fn.name || 'f'}⁻¹)
+              </label>
+            </div>
           {/each}
         </div>
 
         <div class="flex flex-wrap gap-1">
-          {#each [['linear', 'Garis lurus'], ['quadratic', 'Parabola'], ['cubic', 'Kubik'], ['sine', 'Sinus'], ['reciprocal', 'Hiperbola'], ['sqrt', 'Akar'], ['intersect', '2 kurva']] as [k, label] (k)}
+          {#each [['linear', 'Garis lurus'], ['quadratic', 'Parabola'], ['cubic', 'Kubik'], ['sine', 'Sinus'], ['reciprocal', 'Hiperbola'], ['sqrt', 'Akar'], ['intersect', '2 kurva'], ['inverse', 'Fungsi & invers']] as [k, label] (k)}
             <Button variant="outline" size="sm" onclick={() => preset(k)}>{label}</Button>
           {/each}
         </div>
