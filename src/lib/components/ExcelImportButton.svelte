@@ -45,13 +45,11 @@
 </script>
 
 <div class="flex flex-wrap items-center gap-2">
-  <label class="cursor-pointer">
-    <Button variant="outline" size="sm" type="button" disabled={busy} title={label}>
-      {#if busy}<span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />{:else}<Upload class="h-4 w-4" />{/if}
-      {label}
-    </Button>
-    <input bind:this={fileInput} class="hidden" type="file" accept=".xlsx,.xls,.csv" onchange={handleFile} />
-  </label>
+  <Button variant="outline" size="sm" type="button" disabled={busy} title={label} onclick={() => fileInput?.click()}>
+    {#if busy}<span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />{:else}<Upload class="h-4 w-4" />{/if}
+    {label}
+  </Button>
+  <input bind:this={fileInput} class="hidden" type="file" accept=".xlsx,.xls,.csv" onchange={handleFile} />
   {#if templateHeaders.length}
     <Button variant="ghost" size="sm" type="button" onclick={dlTemplate} title="Unduh template">
       <Download class="h-4 w-4" /> Template

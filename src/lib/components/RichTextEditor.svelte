@@ -84,6 +84,7 @@
   let el: HTMLDivElement;
   let editor = $state<Editor | null>(null);
   let uploading = $state(false);
+  let imgInput: HTMLInputElement;
   let mathOpen = $state(false);
   let mathField = $state<any>(null);
   let tableActive = $state(false);
@@ -216,21 +217,20 @@
       <Button variant="ghost" size="icon" onclick={() => editor?.chain().focus().toggleOrderedList().run()} title="List bernomor">
         <ListOrdered class="h-4 w-4" />
       </Button>
-      <label class="cursor-pointer">
-        <Button variant="ghost" size="icon" type="button" disabled={uploading} title="Sisipkan gambar">
-          {#if uploading}<Loader2 class="h-4 w-4 animate-spin" />{:else}<ImageIcon class="h-4 w-4" />{/if}
-        </Button>
-        <input
-          class="hidden"
-          type="file"
-          accept="image/*"
-          onchange={(e) => {
-            const f = (e.currentTarget as HTMLInputElement).files?.[0];
-            if (f) insertImageFromFile(f);
-            (e.currentTarget as HTMLInputElement).value = '';
-          }}
-        />
-      </label>
+      <Button variant="ghost" size="icon" type="button" disabled={uploading} title="Sisipkan gambar" onclick={() => imgInput?.click()}>
+        {#if uploading}<Loader2 class="h-4 w-4 animate-spin" />{:else}<ImageIcon class="h-4 w-4" />{/if}
+      </Button>
+      <input
+        bind:this={imgInput}
+        class="hidden"
+        type="file"
+        accept="image/*"
+        onchange={(e) => {
+          const f = (e.currentTarget as HTMLInputElement).files?.[0];
+          if (f) insertImageFromFile(f);
+          (e.currentTarget as HTMLInputElement).value = '';
+        }}
+      />
       {/if}
       <Button variant="ghost" size="icon" onclick={openMath} title="Sisipkan rumus (MathLive)">
         <Sigma class="h-4 w-4" />
