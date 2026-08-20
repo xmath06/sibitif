@@ -38,6 +38,9 @@
   function setParam(i: number, key: string, v: number) {
     items = items.map((it, idx) => (idx === i ? { ...it, params: { ...it.params, [key]: v } } : it));
   }
+  function setLabelStart(i: number, v: string) {
+    items = items.map((it, idx) => (idx === i ? { ...it, labelStart: v.toUpperCase() } : it));
+  }
 
   // Pratinjau memakai per-item toggle agar sesuai hasil akhir.
   const previewItems = $derived.by(() =>
@@ -98,19 +101,32 @@
                 <Button variant="ghost" size="icon" onclick={() => removeItem(i)} disabled={items.length <= 1}><Trash2 class="h-4 w-4 text-rose-600" /></Button>
               </div>
               <div class="grid grid-cols-3 gap-3">
-                <div class="col-span-3">
-                  <select value={it.shapeId} onchange={(e) => setShape(i, (e.currentTarget as HTMLSelectElement).value)} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
-                    <optgroup label="2D">
-                      {#each GEOMETRY_SHAPES.filter((s) => s.kind === '2d') as s (s.id)}
-                        <option value={s.id}>{s.label}</option>
-                      {/each}
-                    </optgroup>
-                    <optgroup label="3D">
-                      {#each GEOMETRY_SHAPES.filter((s) => s.kind === '3d') as s (s.id)}
-                        <option value={s.id}>{s.label}</option>
-                      {/each}
-                    </optgroup>
-                  </select>
+                <div class="col-span-3 flex items-end gap-3">
+                  <div class="min-w-0 flex-1">
+                    <select value={it.shapeId} onchange={(e) => setShape(i, (e.currentTarget as HTMLSelectElement).value)} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
+                      <optgroup label="2D">
+                        {#each GEOMETRY_SHAPES.filter((s) => s.kind === '2d') as s (s.id)}
+                          <option value={s.id}>{s.label}</option>
+                        {/each}
+                      </optgroup>
+                      <optgroup label="3D">
+                        {#each GEOMETRY_SHAPES.filter((s) => s.kind === '3d') as s (s.id)}
+                          <option value={s.id}>{s.label}</option>
+                        {/each}
+                      </optgroup>
+                    </select>
+                  </div>
+                  <label class="block w-16">
+                    <span class="mb-1 block text-xs font-medium text-muted-foreground">Huruf awal</span>
+                    <input
+                      type="text"
+                      maxlength="1"
+                      value={it.labelStart ?? 'A'}
+                      oninput={(e) => setLabelStart(i, (e.currentTarget as HTMLInputElement).value)}
+                      class="h-10 w-full rounded-lg border border-border bg-card px-2 text-center text-sm uppercase outline-none focus:ring-2 focus:ring-ring"
+                      title="Huruf awal label titik sudut (mis. A, D, K)"
+                    />
+                  </label>
                 </div>
                 {#each geometryShape(it.shapeId)?.params ?? [] as q (q.key)}
                   <label class="block">

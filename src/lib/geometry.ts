@@ -347,6 +347,7 @@ export interface GeometryItem {
   params: Record<string, number>;
   showVertices?: boolean;
   showSides?: boolean;
+  labelStart?: string;
 }
 
 export interface GeometryOptions {
@@ -364,7 +365,8 @@ function renderItemInner(
   showVertices: boolean,
   showSides: boolean,
   w: number,
-  h: number
+  h: number,
+  labelStart = 'A'
 ): string[] {
   const parts: string[] = [];
 
@@ -431,10 +433,11 @@ function renderItemInner(
     if (!skip3DLabels) {
       const labelTargets = def.kind === '2d' ? shape.pts : allPts;
       const labelN = def.kind === '3d' ? Math.min(labelTargets.length, def.id === 'tri_prism' || def.id === 'pyramid' ? 6 : 8) : labelTargets.length;
+      const startIdx = Math.max(0, LETTERS.indexOf(labelStart.toUpperCase()));
       for (let i = 0; i < labelN; i++) {
         const pt = labelTargets[i];
         if (!pt) continue;
-        const letter = LETTERS[i] ?? `P${i + 1}`;
+        const letter = LETTERS[startIdx + i] ?? `P${i + 1}`;
         parts.push(`<circle class="pt" cx="${fmt(sx(pt.x))}" cy="${fmt(sy(pt.y))}" r="2.5"/>`);
         const dy = i === 0 ? -10 : 10;
         parts.push(`<text class="lbl" x="${fmt(sx(pt.x) + 4)}" y="${fmt(sy(pt.y) + dy)}">${letter}</text>`);
@@ -492,7 +495,7 @@ export function renderGeometry(opts: GeometryOptions): string {
     const showS = it.showSides ?? false;
     const col = idx % cols;
     const row = Math.floor(idx / cols);
-    const inner = renderItemInner(def, it.params, showV, showS, cellW, cellH);
+    const inner = renderItemInner(def, it.params, showV, showS, cellW, cellH, it.labelStart);
     // sel grid
     parts.push(`<g transform="translate(${fmt(col * cellW)} ${fmt(row * cellH)})">`);
     // garis sel (border) agar jelas letak tiap bangun — tipis
