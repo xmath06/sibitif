@@ -39,7 +39,7 @@
 {:else if error}
   <Card class="mx-auto mt-10 max-w-md p-6 text-center text-rose-600">{error}</Card>
 {:else}
-  <div class="mb-5 flex items-center justify-between">
+  <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
     <div>
       <h1 class="flex items-center gap-2 text-xl font-bold text-foreground"><Trophy class="h-5 w-5 text-primary" /> Hasil Ujian</h1>
       <p class="text-sm text-muted-foreground">{se?.schedule?.title ?? se?.examSchedule?.title ?? 'Ujian'}</p>

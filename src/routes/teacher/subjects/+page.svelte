@@ -72,7 +72,7 @@
   onMount(load);
 </script>
 
-<div class="mb-5 flex items-center justify-between">
+<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
   <div>
     <h1 class="text-xl font-bold text-foreground">Bank Soal — Mata Pelajaran</h1>
     <p class="text-sm text-muted-foreground">Kelola mapel & topik. Soal dikelola per topik.</p>

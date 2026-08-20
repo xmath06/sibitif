@@ -201,6 +201,8 @@
   let tick: ReturnType<typeof setInterval>;
 
   onMount(async () => {
+    // Di layar kecil (HP) sidebar navigasi memakan terlalu banyak ruang → collapse otomatis.
+    if (typeof window !== 'undefined' && window.innerWidth < 768) collapsed = true;
     try {
       const res = await api.get<{ success: boolean; data: StartExamResponse }>(`/exams/${studentExamId}`);
       exam = (res as any).data;
@@ -252,16 +254,16 @@
 {:else if exam}
   <div class="flex h-screen flex-col bg-background">
     <!-- Header ringkas -->
-    <header class="flex items-center gap-3 border-b border-border bg-card px-4 py-2.5 shadow-sm">
+    <header class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-card px-4 py-2.5 shadow-sm">
       <Button variant="ghost" size="icon" onclick={() => (collapsed = !collapsed)} title="Sembunyikan navigasi">
         {#if collapsed}<PanelLeftOpen class="h-5 w-5" />{:else}<PanelLeftClose class="h-5 w-5" />{/if}
       </Button>
-      <div class="min-w-0">
+      <div class="min-w-0 flex-1">
         <h1 class="truncate text-sm font-semibold text-foreground">{exam.schedule.title}</h1>
-        <p class="text-xs text-muted-foreground">{exam.package.title}</p>
+        <p class="truncate text-xs text-muted-foreground">{exam.package.title}</p>
       </div>
 
-      <div class="ml-auto flex items-center gap-3">
+      <div class="ml-auto flex flex-wrap items-center gap-3">
         <span class={cn('inline-flex items-center gap-1 text-xs', online ? 'text-emerald-600' : 'text-rose-600')}>
           {#if online}<Wifi class="h-4 w-4" />{:else}<WifiOff class="h-4 w-4" />{/if}
         </span>

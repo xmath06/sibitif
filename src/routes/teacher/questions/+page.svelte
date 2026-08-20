@@ -113,7 +113,7 @@
   onMount(async () => { await loadSubjects(); await loadQuestions(); });
 </script>
 
-<div class="mb-5 flex items-center justify-between">
+<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
   <div>
     <h1 class="text-xl font-bold text-foreground">Bank Soal — Soal</h1>
     <p class="text-sm text-muted-foreground">Pilih topik, lalu kelola soal & opsi jawaban.</p>

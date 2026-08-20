@@ -197,7 +197,7 @@
   onMount(load);
 </script>
 
-<div class="mb-5 flex items-center justify-between">
+<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
   <div>
     <h1 class="text-xl font-bold text-foreground">Paket Soal</h1>
     <p class="text-sm text-muted-foreground">Kumpulan soal untuk satu sesi ujian.</p>

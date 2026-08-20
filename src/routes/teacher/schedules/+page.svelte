@@ -57,7 +57,7 @@
   onMount(load);
 </script>
 
-<div class="mb-5 flex items-center justify-between">
+<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
   <h1 class="text-xl font-bold text-foreground">Jadwal Ujian</h1>
   <Button onclick={() => (location.href = '/teacher/schedules/new')}><Plus class="h-4 w-4" /> Buat Jadwal</Button>
 </div>
