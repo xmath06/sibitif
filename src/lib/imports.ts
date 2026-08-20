@@ -181,11 +181,19 @@ export async function importSchedules(rows: ExcelRow[], packages: PackageLike[])
         continue;
       }
       const target = String(r.target ?? r['target'] ?? 'ALL_STUDENTS').toUpperCase().trim();
+      const rawCat = String(r.kategori ?? r.kategori ?? '').toUpperCase().trim();
+      const CATEGORIES = ['EXAM', 'ASSIGNMENT', 'QUIZ', 'PRACTICE'];
+      const category = rawCat ? (CATEGORIES.includes(rawCat) ? rawCat : null) : 'EXAM';
+      if (!category) {
+        res.failed++;
+        res.errors.push(`${line}: kategori "${r.kategori}" tidak dikenali. Pilih salah satu: ${CATEGORIES.join(', ')}`);
+        continue;
+      }
       const payload: any = {
         packageId: pkg.id,
         title,
         startTime: start,
-        category: (String(r.kategori ?? 'EXAM').toUpperCase().trim() as any) || 'EXAM',
+        category,
         accessCode: r.kode_akses ? String(r.kode_akses) : null,
         showResultImmediately: yn(r.tampil_hasil),
         targetType: ['ALL_STUDENTS', 'BY_CLASS', 'BY_GRADE', 'SPECIFIC_STUDENTS'].includes(target) ? (target as any) : 'ALL_STUDENTS',

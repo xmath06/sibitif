@@ -144,6 +144,21 @@
   ];
 
   const religions: (Religion | '')[] = ['', 'ISLAM', 'KRISTEN', 'KATOLIK', 'HINDU', 'BUDDHA', 'KONGHUCU', 'OTHER'];
+
+  const categoryOptions = [
+    { value: 'EXAM', label: 'Ujian (EXAM)' },
+    { value: 'ASSIGNMENT', label: 'Tugas (ASSIGNMENT)' },
+    { value: 'QUIZ', label: 'Kuis (QUIZ)' },
+    { value: 'PRACTICE', label: 'Latihan (PRACTICE)' }
+  ];
+
+  // Kategori lama yang tidak ada di daftar (mis. data legacy) tetap ditampilkan
+  // sebagai opsi agar edit jadwal tidak kehilangan nilainya.
+  const allCategoryOptions = $derived(
+    category && !categoryOptions.some((c) => c.value === category)
+      ? [{ value: category, label: category }, ...categoryOptions]
+      : categoryOptions
+  );
 </script>
 
 <Card class="mx-auto max-w-3xl p-6">
@@ -176,7 +191,11 @@
       </label>
       <label class="block">
         <span class="mb-1 block text-sm font-medium">Kategori</span>
-        <input bind:value={category} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring" placeholder="UH / PTS / PAT" />
+        <select bind:value={category} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
+          <option value="" disabled>Pilih kategori…</option>
+          {#each allCategoryOptions as c}<option value={c.value}>{c.label}</option>{/each}
+        </select>
+        <p class="mt-1 text-xs text-muted-foreground">Ujian, Tugas, Kuis, atau Latihan</p>
       </label>
       <label class="block">
         <span class="mb-1 block text-sm font-medium">Kode Akses (opsional)</span>

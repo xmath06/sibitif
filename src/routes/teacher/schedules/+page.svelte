@@ -78,10 +78,13 @@
   <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
     {#each schedules as s (s.id)}
       <Card class="flex flex-col p-5">
-        <div class="mb-2 flex items-start justify-between gap-2">
-          <h3 class="font-semibold text-foreground">{s.title}</h3>
-          <Badge tone={statusTone(s.scheduleStatus)}>{s.scheduleStatus}</Badge>
-        </div>
+<div class="mb-2 flex items-start justify-between gap-2">
+            <h3 class="font-semibold text-foreground">{s.title}</h3>
+            <div class="flex items-center gap-1.5">
+              {#if s.category}<Badge>{s.category}</Badge>{/if}
+              <Badge tone={statusTone(s.scheduleStatus)}>{s.scheduleStatus}</Badge>
+            </div>
+          </div>
         {#if s.package?.title}<p class="text-sm text-muted-foreground">{s.package.title}</p>{/if}
         <p class="mt-1 text-xs text-muted-foreground">Mulai: {formatClock(s.startTime)}</p>
         <p class="text-xs text-muted-foreground">Teralokasi: <span class="font-semibold text-foreground">{s.allocations?.length ?? 0}</span> siswa</p>
