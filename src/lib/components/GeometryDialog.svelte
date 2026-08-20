@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { GEOMETRY_SHAPES, geometryShape, renderGeometry, geometryToDataUri } from '$lib/geometry';
+  import { GEOMETRY_SHAPES, geometryShape, renderGeometry, geometryToDataUri, type GeometryItem } from '$lib/geometry';
   import Button from '$components/ui/Button.svelte';
-  import { X } from 'lucide-svelte';
+  import { X, Plus, Trash2 } from 'lucide-svelte';
 
   let {
     open = false,
@@ -13,42 +13,59 @@
     onInsert?: (src: string, alt: string) => void;
   } = $props();
 
-  let shapeId = $state('square');
-  let params = $state<Record<string, number>>({});
+  interface Item extends GeometryItem {}
+  let items = $state<Item[]>([{ shapeId: 'square', params: {} }]);
   let showVertices = $state(true);
   let showSides = $state(false);
 
-  function resetParams(id: string) {
+  function defaultParams(id: string): Record<string, number> {
     const def = geometryShape(id);
     const p: Record<string, number> = {};
     if (def) for (const q of def.params) p[q.key] = q.def;
-    params = p;
+    return p;
   }
 
-  function selectShape(id: string) {
-    shapeId = id;
-    resetParams(id);
+  function addItem() {
+    const id = 'square';
+    items = [...items, { shapeId: id, params: defaultParams(id) }];
+  }
+  function removeItem(i: number) {
+    items = items.filter((_, idx) => idx !== i);
+  }
+  function setShape(i: number, id: string) {
+    items = items.map((it, idx) => (idx === i ? { ...it, shapeId: id, params: defaultParams(id) } : it));
+  }
+  function setParam(i: number, key: string, v: number) {
+    items = items.map((it, idx) => (idx === i ? { ...it, params: { ...it.params, [key]: v } } : it));
   }
 
-  const svg = $derived.by(() => {
+  // Pratinjau memakai per-item toggle agar sesuai hasil akhir.
+  const previewItems = $derived.by(() =>
+    items.map((it) => ({ ...it, showVertices, showSides }))
+  );
+  const previewSrc = $derived.by(() => {
     try {
-      return renderGeometry({ shapeId, params, showVertices, showSides });
+      const s = renderGeometry({ items: previewItems });
+      return s ? geometryToDataUri(s) : '';
     } catch {
       return '';
     }
   });
-  const previewSrc = $derived(svg ? geometryToDataUri(svg) : '');
-  const def = $derived(geometryShape(shapeId));
 
   function insert() {
-    if (!previewSrc) return;
-    const label = def?.label ?? 'Bangun geometri';
-    onInsert(previewSrc, `Gambar ${label.toLowerCase()}`);
+    if (!previewSrc || !items.length) return;
+    const labels = items.map((it, i) => {
+      const d = geometryShape(it.shapeId);
+      return `(${String.fromCharCode(97 + i)}) ${d?.label.toLowerCase() ?? ''}`;
+    });
+    onInsert(previewSrc, `Gambar ${labels.join(' ')}`);
     onClose();
   }
 
   $effect(() => {
-    if (open) resetParams(shapeId);
+    if (open) {
+      items = [{ shapeId: 'square', params: defaultParams('square') }];
+    }
   });
 </script>
 
@@ -68,41 +85,50 @@
       </div>
 
       <div class="space-y-4">
-        <div>
-          <span class="mb-1 block text-sm font-medium">Bangun</span>
-          <div class="grid grid-cols-4 gap-1.5">
-            {#each GEOMETRY_SHAPES as s (s.id)}
-              <button
-                onclick={() => selectShape(s.id)}
-                class={[
-                  'rounded-lg border px-2 py-1.5 text-xs transition-colors',
-                  shapeId === s.id ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border bg-card text-foreground hover:bg-accent'
-                ].join(' ')}
-              >
-                {s.label}
-                {#if s.kind === '3d'}<span class="ml-0.5 align-super text-[9px] text-muted-foreground">3D</span>{/if}
-              </button>
-            {/each}
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium">Bangun dalam gambar ({items.length})</span>
+            <Button variant="outline" size="sm" onclick={addItem}><Plus class="h-3.5 w-3.5" /> Tambah bangun</Button>
           </div>
-        </div>
 
-        {#if def && def.params.length}
-          <div class="grid grid-cols-3 gap-3">
-            {#each def.params as q (q.key)}
-              <label class="block">
-                <span class="mb-1 block text-sm font-medium">{q.label}</span>
-                <input
-                  type="number"
-                  step="any"
-                  min="0.5"
-                  value={params[q.key]}
-                  oninput={(e) => (params = { ...params, [q.key]: Number((e.currentTarget as HTMLInputElement).value) })}
-                  class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                />
-              </label>
-            {/each}
-          </div>
-        {/if}
+          {#each items as it, i (i)}
+            <div class="rounded-xl border border-border p-3">
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bangun {String.fromCharCode(97 + i)}</span>
+                <Button variant="ghost" size="icon" onclick={() => removeItem(i)} disabled={items.length <= 1}><Trash2 class="h-4 w-4 text-rose-600" /></Button>
+              </div>
+              <div class="grid grid-cols-3 gap-3">
+                <div class="col-span-3">
+                  <select value={it.shapeId} onchange={(e) => setShape(i, (e.currentTarget as HTMLSelectElement).value)} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
+                    <optgroup label="2D">
+                      {#each GEOMETRY_SHAPES.filter((s) => s.kind === '2d') as s (s.id)}
+                        <option value={s.id}>{s.label}</option>
+                      {/each}
+                    </optgroup>
+                    <optgroup label="3D">
+                      {#each GEOMETRY_SHAPES.filter((s) => s.kind === '3d') as s (s.id)}
+                        <option value={s.id}>{s.label}</option>
+                      {/each}
+                    </optgroup>
+                  </select>
+                </div>
+                {#each geometryShape(it.shapeId)?.params ?? [] as q (q.key)}
+                  <label class="block">
+                    <span class="mb-1 block text-sm font-medium">{q.label}</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.5"
+                      value={it.params[q.key]}
+                      oninput={(e) => setParam(i, q.key, Number((e.currentTarget as HTMLInputElement).value))}
+                      class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </label>
+                {/each}
+              </div>
+            </div>
+          {/each}
+        </div>
 
         <div class="flex flex-wrap gap-4">
           <label class="flex items-center gap-2 text-sm">

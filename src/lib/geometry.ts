@@ -342,28 +342,31 @@ function bounds(pts: Pt[], radius?: number): { minX: number; maxX: number; minY:
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-export interface GeometryOptions {
+export interface GeometryItem {
   shapeId: string;
   params: Record<string, number>;
   showVertices?: boolean;
   showSides?: boolean;
+}
+
+export interface GeometryOptions {
+  items: GeometryItem[];
+  columns?: number;
   width?: number;
   height?: number;
 }
 
-/**
- * Render bangun geometri → string `<svg …>`.
- * - `showVertices`: label titik sudut (A, B, C, …); lingkaran → pusat O.
- * - `showSides`: panjang sisi di tengah tiap garis (dihitung dari dimensi param).
- */
-export function renderGeometry(opts: GeometryOptions): string {
-  const W = opts.width ?? 480;
-  const H = opts.height ?? 360;
-  const showVertices = opts.showVertices ?? true;
-  const showSides = opts.showSides ?? false;
-  const def = geometryShape(opts.shapeId);
-  if (!def) return '';
-  const p = opts.params;
+// Bangun inner-element SVG untuk satu bangun, muat dalam viewport w×h (sudah di-scale).
+// `idSuffix` agar class/id unik bila dipakai banyak bangun dalam satu svg.
+function renderItemInner(
+  def: GeometryShapeDef,
+  p: Record<string, number>,
+  showVertices: boolean,
+  showSides: boolean,
+  w: number,
+  h: number
+): string[] {
+  const parts: string[] = [];
 
   let shape: Shape = { pts: [] };
   let lines: { a: Pt; b: Pt; dashed?: boolean }[] = [];
@@ -375,9 +378,12 @@ export function renderGeometry(opts: GeometryOptions): string {
     shape = build2D(def, p);
     allPts = shape.pts;
     radius = shape.radius;
-    lines = (shape.extraLines ?? []).map((l) => ({ a: l.a, b: l.b }));
+    // sisi poligon: hubungkan titik-titik sudut (urutan mengelilingi)
+    for (let i = 0; i < shape.pts.length; i++) {
+      lines.push({ a: shape.pts[i], b: shape.pts[(i + 1) % shape.pts.length] });
+    }
+    lines.push(...(shape.extraLines ?? []).map((l) => ({ a: l.a, b: l.b })));
     if (shape.center) {
-      // lingkaran: gambar sebagai path lingkaran (bukan garis)
       dimLines.push({ a: shape.center, b: { x: shape.center.x + (shape.radius ?? 0), y: shape.center.y }, value: shape.radius ?? 0 });
       allPts.push({ x: shape.center.x - (shape.radius ?? 0), y: shape.center.y - (shape.radius ?? 0) });
       allPts.push({ x: shape.center.x + (shape.radius ?? 0), y: shape.center.y + (shape.radius ?? 0) });
@@ -391,16 +397,12 @@ export function renderGeometry(opts: GeometryOptions): string {
   }
 
   const b = bounds(allPts, radius);
-  const pad = 34;
-  const scale = Math.min((W - pad * 2) / (b.maxX - b.minX), (H - pad * 2) / (b.maxY - b.minY));
-  const ox = (W - (b.minX + b.maxX) * scale) / 2;
-  const oy = (H - (b.minY + b.maxY) * scale) / 2;
+  const pad = 30;
+  const scale = Math.min((w - pad * 2) / (b.maxX - b.minX), (h - pad * 2) / (b.maxY - b.minY));
+  const ox = (w - (b.minX + b.maxX) * scale) / 2;
+  const oy = (h - (b.minY + b.maxY) * scale) / 2;
   const sx = (x: number) => ox + x * scale;
   const sy = (y: number) => oy + y * scale;
-
-  const parts: string[] = [];
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${def.label}">`);
-  parts.push(`<style>line{stroke:#1e3a8a;stroke-width:2;stroke-linecap:round}.dashed{stroke-dasharray:5 4}.dim{stroke:#94a3b8;stroke-width:1}.pt{fill:#1e3a8a}.lbl{font-family:Arial,sans-serif;font-size:14px;fill:#1e3a8a;font-style:italic}.dimlabel{font-family:Arial,sans-serif;font-size:11px;fill:#64748b}</style>`);
 
   // Gambar segmen
   for (const l of lines) {
@@ -408,18 +410,15 @@ export function renderGeometry(opts: GeometryOptions): string {
     parts.push(`<line class="${cls}" x1="${fmt(sx(l.a.x))}" y1="${fmt(sy(l.a.y))}" x2="${fmt(sx(l.b.x))}" y2="${fmt(sy(l.b.y))}"/>`);
   }
 
-  // Lingkaran penuh
+  // Lingkaran penuh / setengah lingkaran (busur atas)
   if (def.kind === '2d' && shape.center && shape.radius) {
-    parts.push(`<circle cx="${fmt(sx(shape.center.x))}" cy="${fmt(sy(shape.center.y))}" r="${fmt(shape.radius * scale)}" fill="none" stroke="#1e3a8a" stroke-width="2"/>`);
-    // setengah lingkaran: potong bagian bawah via path clip → gunakan path busur
+    const r2 = shape.radius * scale;
+    const cx = sx(shape.center.x);
+    const cy = sy(shape.center.y);
     if (def.id === 'semicircle') {
-      // override: gambar busur atas + diameter (garis bawah sudah digambar extraLines)
-      parts.pop();
-      const r2 = shape.radius * scale;
-      const cx = sx(shape.center.x);
-      const cy = sy(shape.center.y);
-      const a = `M ${fmt(cx - r2)} ${fmt(cy)} A ${fmt(r2)} ${fmt(r2)} 0 0 1 ${fmt(cx + r2)} ${fmt(cy)} Z`;
-      parts.push(`<path d="${a}" fill="none" stroke="#1e3a8a" stroke-width="2"/>`);
+      parts.push(`<path d="M ${fmt(cx - r2)} ${fmt(cy)} A ${fmt(r2)} ${fmt(r2)} 0 0 1 ${fmt(cx + r2)} ${fmt(cy)}" fill="none" stroke="#1e3a8a" stroke-width="2"/>`);
+    } else {
+      parts.push(`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r2)}" fill="none" stroke="#1e3a8a" stroke-width="2"/>`);
     }
   }
 
@@ -428,10 +427,8 @@ export function renderGeometry(opts: GeometryOptions): string {
     if (def.kind === '2d' && shape.center && shape.centerLabel) {
       parts.push(`<text class="lbl" x="${fmt(sx(shape.center.x) + 8)}" y="${fmt(sy(shape.center.y) - 6)}">${shape.centerLabel}</text>`);
     }
-    // label untuk poligon 2D & 3D: beri huruf sesuai urutan; skip 3D dengan titik terlalu banyak
-    if (def.kind === '3d' && (def.id === 'cylinder' || def.id === 'sphere' || def.id === 'cone')) {
-      // tanpa label titik
-    } else {
+    const skip3DLabels = def.kind === '3d' && (def.id === 'cylinder' || def.id === 'sphere' || def.id === 'cone');
+    if (!skip3DLabels) {
       const labelTargets = def.kind === '2d' ? shape.pts : allPts;
       const labelN = def.kind === '3d' ? Math.min(labelTargets.length, def.id === 'tri_prism' || def.id === 'pyramid' ? 6 : 8) : labelTargets.length;
       for (let i = 0; i < labelN; i++) {
@@ -445,7 +442,7 @@ export function renderGeometry(opts: GeometryOptions): string {
     }
   }
 
-  // Panjang sisi (dari garis & dimLines)
+  // Panjang sisi
   if (showSides) {
     const drawDim = (a: Pt, b: Pt, value: number) => {
       const mx = sx((a.x + b.x) / 2);
@@ -463,6 +460,49 @@ export function renderGeometry(opts: GeometryOptions): string {
       drawDim(dl.a, dl.b, dl.value);
     }
   }
+
+  return parts;
+}
+
+/**
+ * Render satu atau lebih bangun geometri → string `<svg …>`.
+ * Multi-object disusun dalam grid; tiap sel diberi keterangan (a), (b), (c), …
+ * - `showVertices`: label titik sudut (A, B, C, …); lingkaran → pusat O.
+ * - `showSides`: panjang sisi di tengah tiap garis (dihitung dari dimensi param).
+ */
+export function renderGeometry(opts: GeometryOptions): string {
+  const W = opts.width ?? 480;
+  const H = opts.height ?? 360;
+  const items = opts.items.filter((it) => geometryShape(it.shapeId));
+  if (!items.length) return '';
+
+  const n = items.length;
+  const cols = Math.max(1, Math.min(opts.columns ?? 0, n) || (n === 1 ? 1 : n <= 4 ? 2 : 3));
+  const rows = Math.ceil(n / cols);
+  const cellW = W / cols;
+  const cellH = H / rows;
+
+  const parts: string[] = [];
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${items.length === 1 ? geometryShape(items[0].shapeId)!.label : 'Bangun geometri'}">`);
+  parts.push(`<style>line{stroke:#1e3a8a;stroke-width:2;stroke-linecap:round}.dashed{stroke-dasharray:5 4}.dim{stroke:#94a3b8;stroke-width:1}.pt{fill:#1e3a8a}.lbl{font-family:Arial,sans-serif;font-size:14px;fill:#1e3a8a;font-style:italic}.dimlabel{font-family:Arial,sans-serif;font-size:11px;fill:#64748b}.caption{font-family:Arial,sans-serif;font-size:12px;fill:#334155}</style>`);
+
+  items.forEach((it, idx) => {
+    const def = geometryShape(it.shapeId)!;
+    const showV = it.showVertices ?? true;
+    const showS = it.showSides ?? false;
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const inner = renderItemInner(def, it.params, showV, showS, cellW, cellH);
+    // sel grid
+    parts.push(`<g transform="translate(${fmt(col * cellW)} ${fmt(row * cellH)})">`);
+    // garis sel (border) agar jelas letak tiap bangun — tipis
+    parts.push(`<rect x="2" y="2" width="${fmt(cellW - 4)}" height="${fmt(cellH - 4)}" fill="none" stroke="#e2e8f0" stroke-width="1" rx="4"/>`);
+    parts.push(...inner);
+    // keterangan huruf di pojok kiri atas sel
+    const caption = `(${LETTERS[idx]?.toLowerCase()})`;
+    parts.push(`<text class="caption" x="8" y="18">${caption}</text>`);
+    parts.push(`</g>`);
+  });
 
   parts.push('</svg>');
   return parts.join('');
