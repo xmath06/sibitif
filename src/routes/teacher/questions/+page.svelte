@@ -249,7 +249,7 @@
               {f.questionType === 'MCQ'
                 ? 'Centang "Benar" & isi bobot (1 = benar, 0 = salah, 0.5 = parsial). Skor = jumlah bobot opsi terpilih.'
                 : f.questionType === 'MULTI_SELECT'
-                  ? 'Boleh memilih lebih dari satu; centang "Kunci" pada semua opsi benar. Skor penuh jika semua kunci tepat, else 0.'
+                  ? 'Boleh memilih lebih dari satu; centang "Kunci" pada semua opsi benar. Skor tetap 1 (tanpa pengali) jika semua kunci tepat, else 0.'
                   : 'Centang "Kunci" pada opsi benar. Skor = pengali paket jika tepat, else 0.'}
             </p>
           </div>

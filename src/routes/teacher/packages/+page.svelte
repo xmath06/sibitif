@@ -10,7 +10,7 @@
   import Html from '$components/Html.svelte';
   import { importPackages } from '$lib/imports';
   import { QUESTION_TYPE_LABELS as TL } from '$lib/questionTypes';
-  import { NON_MCQ_TYPES, resolveTypeWeights } from '$lib/scoring';
+  import { PENGALI_TYPES, resolveTypeWeights } from '$lib/scoring';
 
   interface Subject { id: string; name: string; topics?: { id: string; name: string }[] }
   interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number>; typeScoreWeight?: Record<string, number> | null; maxScore?: number }
@@ -351,13 +351,15 @@
       </div>
       <div class="border-b border-border px-5 py-3">
         <p class="mb-1 text-sm font-medium">Bobot Skor per Tipe (pengali)</p>
-        <p class="mb-2 text-xs text-muted-foreground">MCQ berbobot per opsi. Tipe lain: skor tetap 1 × pengali di bawah ini.</p>
+        <p class="mb-2 text-xs text-muted-foreground">Hanya tipe terpilih yang punya pengali. MCQ &amp; Pilihan Ganda (Banyak Jawaban) tidak punya pengali.</p>
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {#each NON_MCQ_TYPES as t}
-            <label class="block">
-              <span class="mb-1 block text-xs text-muted-foreground">{TL[t]}{manageSelectedTypes[t] ? ` (${manageSelectedTypes[t]})` : ''}</span>
-              <input type="number" min="0.5" step="0.5" bind:value={manageTypeWeights[t]} class="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
-            </label>
+          {#each PENGALI_TYPES as t}
+            {#if manageSelectedTypes[t]}
+              <label class="block">
+                <span class="mb-1 block text-xs text-muted-foreground">{TL[t]} ({manageSelectedTypes[t]})</span>
+                <input type="number" min="0.5" step="0.5" bind:value={manageTypeWeights[t]} class="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
+              </label>
+            {/if}
           {/each}
         </div>
       </div>

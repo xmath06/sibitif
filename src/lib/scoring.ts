@@ -1,18 +1,22 @@
-export const NON_MCQ_TYPES = [
+// Tipe soal yang punya pengali skor di level paket.
+// MCQ berbobot per opsi, MULTI_SELECT skor tetap 1 (keduanya TANPA pengali).
+export const PENGALI_TYPES = [
   "ESSAY",
   "URAIAN_PENDEK",
   "TRUE_FALSE",
   "POLY_CHOICE",
-  "MULTI_SELECT",
 ] as const;
 
 export function resolveTypeWeights(raw: unknown): Record<string, number> {
   const m: Record<string, number> = {};
-  for (const t of NON_MCQ_TYPES) m[t] = 1;
+  for (const t of PENGALI_TYPES) m[t] = 1;
   if (raw && typeof raw === "object") {
-    for (const t of NON_MCQ_TYPES) {
+    for (const t of PENGALI_TYPES) {
       const v = (raw as Record<string, unknown>)[t];
-      if (v != null && Number(v) > 0) m[t] = Number(v);
+      if (v != null && Number(v) > 0) {
+        // hanya simpan yg > 0; tipe lain default 1
+        m[t] = Number(v);
+      }
     }
   }
   return m;
@@ -21,3 +25,4 @@ export function resolveTypeWeights(raw: unknown): Record<string, number> {
 export function defaultTypeWeights(): Record<string, number> {
   return resolveTypeWeights({});
 }
+
