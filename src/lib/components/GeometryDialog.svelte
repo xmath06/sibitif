@@ -185,7 +185,7 @@
                       </optgroup>
                     </select>
                   </div>
-                  <label class="block w-16">
+                  <!-- <label class="block w-16">
                     <span class="mb-1 block text-xs font-medium text-muted-foreground">Huruf awal</span>
                     <input
                       type="text"
@@ -195,7 +195,7 @@
                       class="h-10 w-full rounded-lg border border-border bg-card px-2 text-center text-sm uppercase outline-none focus:ring-2 focus:ring-ring"
                       title="Huruf awal label titik sudut (mis. A, D, K)"
                     />
-                  </label>
+                  </label> -->
                 </div>
                 {#each geometryShape(it.shapeId)?.params ?? [] as q (q.key)}
                   <label class="block">

@@ -518,7 +518,15 @@
     >
       <div class="w-full max-w-lg rounded-2xl bg-card p-5 shadow-xl animate-fade-in">
         <h3 class="mb-3 text-sm font-semibold text-foreground">Editor Persamaan Matematika</h3>
-        <math-field bind:this={mathField}></math-field>
+        <math-field
+          bind:this={mathField}
+          onkeydown={(e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              insertMath();
+            }
+          }}
+        ></math-field>
         <div class="mt-4 flex justify-end gap-2">
           <Button variant="outline" onclick={() => (mathOpen = false)}>Batal</Button>
           <Button onclick={insertMath}>Sisipkan</Button>
