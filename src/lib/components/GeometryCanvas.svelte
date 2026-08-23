@@ -8,6 +8,7 @@
     addSceneItem,
     resizeCanvasToContent,
     computeSceneLabels,
+    computeSceneIntersections,
     GEOMETRY_STYLE,
     type GeoScene,
     type GeoSceneItem
@@ -234,7 +235,7 @@
             <line x1={p1.x - minX} y1={p1.y - minY} x2={p2.x - minX} y2={p2.y - minY} stroke="#1e3a8a" stroke-width="2" />
             <line x1={p1.x - minX} y1={p1.y - minY} x2={p2.x - minX} y2={p2.y - minY} stroke="transparent" stroke-width="14" />
           </svg>
-          {#if editable}
+          {#if editable && selectedId === it.id}
             <div
               class="absolute z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-primary bg-white"
               style="left:{p1.x - minX}px;top:{p1.y - minY}px"
@@ -292,6 +293,10 @@
       {@html GEOMETRY_STYLE}
       {#each computeSceneLabels(scene, pxPerUnit) as l (l.x + '_' + l.y + '_' + l.letter)}
         <text class="lbl" x={l.x} y={l.y} text-anchor={l.anchor}>{l.letter}</text>
+      {/each}
+      {#each computeSceneIntersections(scene, pxPerUnit) as l (l.x + '_' + l.y + '_' + l.letter)}
+        <circle class="int-dot" cx={l.x} cy={l.y} r="3.5" />
+        <text class="lbl" x={l.x} y={l.y + 5} text-anchor="middle">{l.letter}</text>
       {/each}
     </svg>
   </div>

@@ -8,7 +8,7 @@ const TAU = Math.PI * 2;
 const FREE_MARGIN = 1;
 
 // Style SVG bersama (dipakai oleh renderGeometry, renderShapeSvg, renderScene).
-export const GEOMETRY_STYLE = `<style>line{stroke:#1e3a8a;stroke-width:2;stroke-linecap:round}.dashed{stroke-dasharray:5 4}.edge{fill:none;stroke:#1e3a8a;stroke-width:2}.dim{stroke:#94a3b8;stroke-width:1}.pt{fill:#1e3a8a}.lbl{font-family:Arial,sans-serif;font-size:14px;fill:#1e3a8a;font-style:italic}.dimlabel{font-family:Arial,sans-serif;font-size:11px;fill:#64748b}.caption{font-family:Arial,sans-serif;font-size:12px;fill:#334155}</style>`;
+export const GEOMETRY_STYLE = `<style>line{stroke:#1e3a8a;stroke-width:2;stroke-linecap:round}.dashed{stroke-dasharray:5 4}.edge{fill:none;stroke:#1e3a8a;stroke-width:2}.dim{stroke:#94a3b8;stroke-width:1}.pt{fill:#1e3a8a}.lbl{font-family:Arial,sans-serif;font-size:14px;fill:#1e3a8a;font-style:italic}.int-dot{fill:#fff;stroke:#1e3a8a;stroke-width:1.5}.dimlabel{font-family:Arial,sans-serif;font-size:11px;fill:#64748b}.caption{font-family:Arial,sans-serif;font-size:12px;fill:#334155}</style>`;
 
 interface Pt { x: number; y: number }
 interface Pt3 { x: number; y: number; z: number }
@@ -864,6 +864,85 @@ export function computeSceneLabels(scene: GeoScene, ppu = 24): SceneLabel[] {
   });
 }
 
+// Titik potong dua segmen (inklusif ujung). null bila sejajar/tidak berpotongan.
+function segIntersect(a: Pt, b: Pt, c: Pt, d: Pt): Pt | null {
+  const rx = b.x - a.x;
+  const ry = b.y - a.y;
+  const sx = d.x - c.x;
+  const sy = d.y - c.y;
+  const denom = rx * sy - ry * sx;
+  if (Math.abs(denom) < 1e-9) return null;
+  const qpx = c.x - a.x;
+  const qpy = c.y - a.y;
+  const t = (qpx * sy - qpy * sx) / denom;
+  const u = (qpx * ry - qpy * rx) / denom;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return { x: a.x + t * rx, y: a.y + t * ry };
+}
+
+// Titik sudut absolut (garis luar) sebuah bangun, sudah termasuk rotasi & skala kanvas.
+function shapeOutlineAbs(scene: GeoScene, it: GeoSceneItem, ppu: number): Pt[] {
+  const def = geometryShape(it.shapeId);
+  if (!def) return [];
+  const p = resolvedParams(def, it.params);
+  const unitPts = def.kind === '2d' ? build2D(def, p).pts : build3D(def, p).pts;
+  const { sx, sy } = freeformMapping(def, it.params, ppu);
+  const { w, h } = shapePixelSize(
+    { shapeId: it.shapeId, params: it.params, showVertices: it.showVertices, showSides: it.showSides, skipLabels: true },
+    ppu
+  );
+  const ap = resolveItemPos(scene, it);
+  const rot = ((it.rotation ?? 0) * Math.PI) / 180;
+  const sc = ap.scale;
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
+  return unitPts.map((pt) => {
+    const lx = (sx(pt.x) - w / 2) * sc;
+    const ly = (sy(pt.y) - h / 2) * sc;
+    const rx = lx * cos - ly * sin;
+    const ry = lx * sin + ly * cos;
+    return { x: ap.x + w / 2 + rx, y: ap.y + h / 2 + ry };
+  });
+}
+
+/**
+ * Hitung titik potong antar garis maupun garis dengan sisi bangun, lalu beri
+ * label huruf yang melanjutkan urutan label titik sudut yang sudah ada.
+ */
+export function computeSceneIntersections(scene: GeoScene, ppu = 24): SceneLabel[] {
+  const segs: { a: Pt; b: Pt; itemId: string }[] = [];
+  for (const it of scene.items) {
+    if (it.shapeId === 'line' && it.endpoints && it.endpoints.length === 2) {
+      segs.push({ a: it.endpoints[0], b: it.endpoints[1], itemId: it.id });
+    } else {
+      const pts = shapeOutlineAbs(scene, it, ppu);
+      for (let i = 0; i < pts.length; i++) {
+        segs.push({ a: pts[i], b: pts[(i + 1) % pts.length], itemId: it.id });
+      }
+    }
+  }
+  const used = new Set(computeSceneLabels(scene, ppu).map((l) => l.letter));
+  const out: SceneLabel[] = [];
+  let code = 'A'.charCodeAt(0);
+  const nextLetter = () => {
+    while (used.has(String.fromCharCode(code))) code++;
+    const letter = String.fromCharCode(code);
+    used.add(letter);
+    return letter;
+  };
+  for (let i = 0; i < segs.length; i++) {
+    for (let j = i + 1; j < segs.length; j++) {
+      if (segs[i].itemId === segs[j].itemId) continue;
+      const p = segIntersect(segs[i].a, segs[i].b, segs[j].a, segs[j].b);
+      if (!p) continue;
+      // Hindari label ganda pada titik yang hampir berimpit.
+      if (out.some((o) => Math.hypot(o.x - p.x, o.y - p.y) < 6)) continue;
+      out.push({ x: p.x, y: p.y, letter: nextLetter(), anchor: 'middle' });
+    }
+  }
+  return out;
+}
+
 export function renderScene(scene: GeoScene, pxPerUnit = 24): string {
   const order = [...scene.items].sort((a, b) => (a.z ?? 0) - (b.z ?? 0));
   const inner = order
@@ -893,7 +972,14 @@ export function renderScene(scene: GeoScene, pxPerUnit = 24): string {
   const labels = computeSceneLabels(scene, pxPerUnit)
     .map((l) => `<text class="lbl" x="${fmt(l.x)}" y="${fmt(l.y)}" text-anchor="${l.anchor}">${l.letter}</text>`)
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${scene.width} ${scene.height}" width="${scene.width}" height="${scene.height}" role="img" aria-label="Bangun geometri">${GEOMETRY_STYLE}<g>${inner}</g><g class="labels">${labels}</g></svg>`;
+  // Titik potong garis/sisi bangun diberi label huruf lanjutan.
+  const inter = computeSceneIntersections(scene, pxPerUnit)
+    .map(
+      (l) =>
+        `<circle class="int-dot" cx="${fmt(l.x)}" cy="${fmt(l.y)}" r="3.5"/><text class="lbl" x="${fmt(l.x)}" y="${fmt(l.y + 5)}" text-anchor="middle">${l.letter}</text>`
+    )
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${scene.width} ${scene.height}" width="${scene.width}" height="${scene.height}" role="img" aria-label="Bangun geometri">${GEOMETRY_STYLE}<g>${inner}</g><g class="labels">${labels}${inter}</g></svg>`;
 }
 
 export function sceneToDataUri(scene: GeoScene): string {
