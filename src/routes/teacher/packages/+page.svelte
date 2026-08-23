@@ -13,7 +13,7 @@
   import { NON_MCQ_TYPES, resolveTypeWeights, defaultTypeWeights } from '$lib/scoring';
 
   interface Subject { id: string; name: string; topics?: { id: string; name: string }[] }
-  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number>; typeScoreWeight?: Record<string, number> | null }
+  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number>; typeScoreWeight?: Record<string, number> | null; maxScore?: number }
 
   function pkgBreakdown(p: Pkg) {
     return Object.entries(p.questionTypeCounts ?? {})
@@ -34,6 +34,7 @@
   let f = $state({ title: '', subjectId: '', hasTimer: true, durationMinutes: '', passScore: '', isRandomQuestions: true, isRandomOptions: false, typeScoreWeight: defaultTypeWeights() });
   let saving = $state(false);
   let formErr = $state('');
+  let editingMcqPart = $state(0);
 
   let manageShow = $state(false);
   let managePkg = $state<Pkg | null>(null);
@@ -67,8 +68,20 @@
   function openEdit(p: Pkg) {
     editing = p;
     f = { title: p.title, subjectId: p.subjectId ?? '', hasTimer: Boolean(p.hasTimer), durationMinutes: String(p.durationMinutes ?? ''), passScore: String(p.passScore ?? ''), isRandomQuestions: true, isRandomOptions: false, typeScoreWeight: resolveTypeWeights(p.typeScoreWeight) };
+    const tw0 = resolveTypeWeights(p.typeScoreWeight);
+    let nonMcq = 0;
+    for (const [t, n] of Object.entries(p.questionTypeCounts ?? {})) if (t !== 'MCQ') nonMcq += n * (tw0[t] ?? 1);
+    editingMcqPart = (p.maxScore ?? 0) - nonMcq;
     formErr = ''; show = true;
   }
+  const dialogMaxScore = $derived.by(() => {
+    if (!editing) return 0;
+    let nonMcq = 0;
+    for (const [t, n] of Object.entries(editing.questionTypeCounts ?? {})) {
+      if (t !== 'MCQ') nonMcq += n * (f.typeScoreWeight[t] ?? 1);
+    }
+    return nonMcq + editingMcqPart;
+  });
   async function save() {
     saving = true; formErr = '';
     const body: any = {
@@ -260,6 +273,7 @@
           {#if p.hasTimer}<Badge tone="muted"><Clock class="h-3 w-3" /> {p.durationMinutes ?? '?'} mnt</Badge>{/if}
           {#if p.passScore != null}<Badge tone="muted">Pass {p.passScore}</Badge>{/if}
           {#if p.questionCount != null}<Badge tone="muted"><Layers class="h-3 w-3" /> {p.questionCount} soal</Badge>{/if}
+          {#if p.maxScore != null}<Badge tone="muted">Nilai Maks {p.maxScore}</Badge>{/if}
         </div>
         {#if p.questionCount != null && Object.keys(p.questionTypeCounts ?? {}).length}
           <p class="mt-2 text-xs text-muted-foreground">{pkgBreakdown(p)}</p>
@@ -303,8 +317,10 @@
               </label>
             {/each}
           </div>
+          {#if editing}
+            <p class="mt-2 text-xs text-muted-foreground">Total Nilai Maksimal: <span class="font-semibold text-foreground">{dialogMaxScore}</span> (MCQ dihitung dari bobot opsi; tipe lain = jumlah × pengali).</p>
+          {/if}
         </div>
-      </div>
       <div class="mt-5 flex justify-end gap-2">
         <Button variant="outline" onclick={() => (show = false)}>Batal</Button>
         <Button onclick={save} disabled={saving}>{#if saving}<Loader2 class="h-4 w-4 animate-spin" />{/if} Simpan</Button>
