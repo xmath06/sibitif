@@ -223,23 +223,27 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): {
     }
     case 'cylinder': {
       const r = p.r, h = p.h;
-      // lingkaran alas & atas (proyeksi kabinet lewat iso, koordinat unit
-      // — konsisten dengan bangun 3D lainnya; tanpa offset 200/*40 agar
-      // ukuran tabung sepadan di mode freeform/kanvas).
       const N = 32;
+      // Proyeksi kabinet SAMA dengan versi sebelumnya (elips alas sejajar
+      // sumbu, tiang tegak tepat di ujung kiri/kanan elips) — hanya dalam
+      // koordinat UNIT (tanpa offset 200 & skala *40) agar ukurannya sepadan
+      // dengan bangun 3D lain di mode freeform/kanvas (fix "gambar tabung raksasa").
+      const proj = (bx: number, by: number, z: number): Pt => ({ x: bx, y: -(z + by * 0.5) });
       const bot: Pt[] = [];
       const top: Pt[] = [];
       for (let i = 0; i <= N; i++) {
         const a = (i / N) * TAU;
         const bx = r * Math.cos(a), by = r * Math.sin(a);
-        bot.push(iso({ x: bx, y: by, z: 0 }));
-        top.push(iso({ x: bx, y: by, z: h }));
+        bot.push(proj(bx, by, 0));
+        top.push(proj(bx, by, h));
       }
-      // garis tegak sisi kiri & kanan
-      seg({ x: -r, y: 0, z: 0 }, { x: -r, y: 0, z: h });
-      seg({ x: r, y: 0, z: 0 }, { x: r, y: 0, z: h });
+      // garis tegak sisi kiri & kanan (di ujung elips)
+      const leftBot = proj(-r, 0, 0), leftTop = proj(-r, 0, h);
+      const rightBot = proj(r, 0, 0), rightTop = proj(r, 0, h);
+      lines.push({ a: leftBot, b: leftTop });
+      lines.push({ a: rightBot, b: rightTop });
       pts.push(...bot, ...top);
-      // busur alas: depan solid, belakang (y>0) putus-putus
+      // busur alas: depan solid, belakang (sin a > 0) putus-putus
       lines.push(...bot.slice(0, N).map((p2, i) => ({
         a: p2,
         b: bot[i + 1],
@@ -252,27 +256,28 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): {
         dashed: false
       })));
       // dimensi: jari-jari alas & tinggi
-      mark({ x: 0, y: 0, z: 0 }, { x: r, y: 0, z: 0 });
-      mark({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: h });
+      dimLines.push({ a: proj(0, 0, 0), b: proj(r, 0, 0), value: r });
+      dimLines.push({ a: proj(0, 0, 0), b: proj(0, 0, h), value: h });
       // rusuk: jari-jari alas (bisa diberi label panjang)
-      edgeLines.push({ a: iso({ x: 0, y: 0, z: 0 }), b: iso({ x: r, y: 0, z: 0 }), value: r });
+      edgeLines.push({ a: proj(0, 0, 0), b: proj(r, 0, 0), value: r });
       break;
     }
     case 'cone': {
       const r = p.r, h = p.h;
       const N = 32;
+      const proj = (bx: number, by: number, z: number): Pt => ({ x: bx, y: -(z + by * 0.5) });
       const bot: Pt[] = [];
       for (let i = 0; i <= N; i++) {
         const a = (i / N) * TAU;
         const bx = r * Math.cos(a), by = r * Math.sin(a);
-        bot.push(iso({ x: bx, y: by, z: 0 }));
+        bot.push(proj(bx, by, 0));
       }
       // puncak tepat di atas pusat alas
-      const apex = { x: 0, y: 0, z: h };
-      pts.push(iso(apex), ...bot);
+      const apex = proj(0, 0, h);
+      pts.push(apex, ...bot);
       // dua garis pelukis (siluet) dari puncak ke ujung kiri/kanan alas
-      seg(apex, { x: -r, y: 0, z: 0 });
-      seg(apex, { x: r, y: 0, z: 0 });
+      lines.push({ a: apex, b: proj(-r, 0, 0) });
+      lines.push({ a: apex, b: proj(r, 0, 0) });
       // busur alas: depan (sin a < 0) solid, belakang (sin a > 0) putus-putus
       lines.push(...bot.slice(0, N).map((p2, i) => ({
         a: p2,
@@ -280,10 +285,10 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): {
         dashed: Math.sin(((i + 0.5) / N) * TAU) > 0
       })));
       // dimensi: jari-jari alas & tinggi
-      mark({ x: 0, y: 0, z: 0 }, { x: r, y: 0, z: 0 });
-      mark({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: h });
+      dimLines.push({ a: proj(0, 0, 0), b: proj(r, 0, 0), value: r });
+      dimLines.push({ a: proj(0, 0, 0), b: apex, value: h });
       // rusuk: jari-jari alas (bisa diberi label panjang)
-      edgeLines.push({ a: iso({ x: 0, y: 0, z: 0 }), b: iso({ x: r, y: 0, z: 0 }), value: r });
+      edgeLines.push({ a: proj(0, 0, 0), b: proj(r, 0, 0), value: r });
       break;
     }
     case 'sphere': {
