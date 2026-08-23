@@ -38,7 +38,7 @@ export async function importQuestions(rows: ExcelRow[], subjects: SubjectLike[])
     byKey.set(s.code.toLowerCase(), s);
     byKey.set(s.name.toLowerCase(), s);
   }
-  const validTypes = ['MCQ', 'ESSAY', 'TRUE_FALSE', 'POLY_CHOICE', 'MULTI_SELECT'];
+  const validTypes = ['MCQ', 'ESSAY', 'TRUE_FALSE', 'POLY_CHOICE', 'MULTI_SELECT', 'URAIAN_PENDEK'];
   const letters = ['a', 'b', 'c', 'd', 'e'];
 
   for (let i = 0; i < rows.length; i++) {
@@ -62,12 +62,16 @@ export async function importQuestions(rows: ExcelRow[], subjects: SubjectLike[])
       const type = String(r.tipe ?? r['tipe soal'] ?? '').toUpperCase().trim();
       if (!validTypes.includes(type)) {
         res.failed++;
-        res.errors.push(`${line}: tipe "${r.tipe}" tidak valid (MCQ/ESSAY/TRUE_FALSE/POLY_CHOICE/MULTI_SELECT)`);
+        res.errors.push(`${line}: tipe "${r.tipe}" tidak valid (MCQ/ESSAY/TRUE_FALSE/POLY_CHOICE/MULTI_SELECT/URAIAN_PENDEK)`);
         continue;
       }
       const keys = String(r.kunci ?? '').toUpperCase().split(/[,\/]/).map((s) => s.trim()).filter(Boolean);
       const options: { optionText: string; scoreWeight: number }[] = [];
-      if (type !== 'ESSAY') {
+      let answerKeyText = '';
+      if (type === 'ESSAY' || type === 'URAIAN_PENDEK') {
+        // tidak punya opsi; URAIAN_PENDEK menyimpan kunci sebagai teks jawaban
+        if (type === 'URAIAN_PENDEK') answerKeyText = String(r.kunci ?? '').trim();
+      } else {
         for (const L of letters) {
           const t = r[L];
           if (t != null && String(t).trim() !== '') {
@@ -92,9 +96,10 @@ export async function importQuestions(rows: ExcelRow[], subjects: SubjectLike[])
         continue;
       }
       const payload: any = { topicId: topic.id, questionText: text, questionType: type };
-      if (type === 'ESSAY') {
+      if (type === 'ESSAY' || type === 'URAIAN_PENDEK') {
         if (r.min_kata) payload.minWordCount = Number(r.min_kata) || undefined;
         if (r.max_kata) payload.maxWordCount = Number(r.max_kata) || undefined;
+        if (type === 'URAIAN_PENDEK' && answerKeyText) payload.answerKey = answerKeyText;
       } else {
         payload.options = options;
       }

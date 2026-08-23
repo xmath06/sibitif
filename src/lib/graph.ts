@@ -417,7 +417,7 @@ export function renderFunctionGraph(opts: GraphOptions): string {
   const xMax = opts.xMax;
 
   // Tentukan y-range (dari semua fungsi)
-  let yMin = opts.yMin ?? null;
+  let yMin = opts.yMin ?? -1;
   let yMax = opts.yMax ?? null;
   if (yMin == null || yMax == null) {
     const ys: number[] = [];
@@ -485,14 +485,17 @@ export function renderFunctionGraph(opts: GraphOptions): string {
     }
   }
 
-  // Sumbu
+  // Sumbu. Sumbu-x (garis horizontal y=0) tampil bila 0 berada dalam rentang y;
+  // sumbu-y (garis vertikal x=0) tampil bila 0 berada dalam rentang x.
+  // (Sempat terbalik: sumbu-y hilang untuk kurva yang seluruhnya di atas sumbu-x,
+  //  mis. f(x)=x^2+3.)
   const x0 = sx(0);
   const y0 = sy(0);
-  if (xMin <= 0 && xMax >= 0) {
+  if (yMin <= 0 && yMax >= 0) {
     parts.push(`<line class="axis" x1="${fmt(margin.l)}" y1="${fmt(y0)}" x2="${fmt(margin.l + plotW)}" y2="${fmt(y0)}"/>`);
     parts.push(`<polygon points="${fmt(margin.l + plotW)},${fmt(y0)} ${fmt(margin.l + plotW - 9)},${fmt(y0 - 4)} ${fmt(margin.l + plotW - 9)},${fmt(y0 + 4)}" fill="#0f172a"/>`);
   }
-  if (yMin <= 0 && yMax >= 0) {
+  if (xMin <= 0 && xMax >= 0) {
     parts.push(`<line class="axis" x1="${fmt(x0)}" y1="${fmt(margin.t)}" x2="${fmt(x0)}" y2="${fmt(margin.t + plotH)}"/>`);
     parts.push(`<polygon points="${fmt(x0)},${fmt(margin.t)} ${fmt(x0 - 4)},${fmt(margin.t + 9)} ${fmt(x0 + 4)},${fmt(margin.t + 9)}" fill="#0f172a"/>`);
   }

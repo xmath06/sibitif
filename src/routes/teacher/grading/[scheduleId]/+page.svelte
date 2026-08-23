@@ -18,7 +18,7 @@
   // modal penilaian esai
   let show = $state(false);
   let detail = $state<any>(null);
-  let essays = $state<{ questionId: string; questionText: string; essayAnswer: string; wordCount?: number; score: string; teacherFeedback: string }[]>([]);
+  let essays = $state<{ questionId: string; questionText: string; essayAnswer: string; wordCount?: number; answerKey?: string | null; score: string; teacherFeedback: string }[]>([]);
   let saving = $state(false);
   let formErr = $state('');
 
@@ -40,12 +40,13 @@
       detail = d as any;
       const se = detail?.studentExam ?? detail;
       essays = (se?.answers ?? [])
-        .filter((a: any) => a.question?.questionType === 'ESSAY' || a.questionType === 'ESSAY' || a.essayAnswer)
+        .filter((a: any) => a.question?.questionType === 'ESSAY' || a.question?.questionType === 'URAIAN_PENDEK' || a.questionType === 'ESSAY' || a.questionType === 'URAIAN_PENDEK' || a.essayAnswer)
         .map((a: any) => ({
           questionId: a.questionId,
           questionText: a.question?.questionText ?? '',
           essayAnswer: a.essayAnswer ?? '',
           wordCount: a.wordCount ?? undefined,
+          answerKey: a.question?.answerKey ?? null,
           score: String(a.score ?? ''),
           teacherFeedback: a.teacherFeedback ?? ''
         }));
@@ -133,17 +134,17 @@
   <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onclick={(e) => e.target === e.currentTarget && (show = false)} onkeydown={(e) => e.key === 'Escape' && (show = false)}>
     <Card class="max-h-[90vh] w-full max-w-lg overflow-y-auto p-6">
       <div class="mb-4 flex items-center justify-between">
-        <h3 class="text-base font-semibold text-foreground">Penilaian Esai</h3>
+        <h3 class="text-base font-semibold text-foreground">Penilaian Esai / Uraian Pendek</h3>
         <button onclick={() => (show = false)} class="text-muted-foreground hover:text-foreground"><X class="h-5 w-5" /></button>
       </div>
       {#if formErr}<p class="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{formErr}</p>{/if}
       {#if essays.length === 0}
-        <p class="text-sm text-muted-foreground">Tidak ada soal esai pada ujian ini.</p>
+        <p class="text-sm text-muted-foreground">Tidak ada soal esai/uraian pendek pada ujian ini.</p>
       {:else}
         <div class="space-y-4">
           {#each essays as g, i (g.questionId)}
             <div class="rounded-lg border border-border p-3">
-              <p class="text-xs font-medium text-muted-foreground">Soal Esai #{i + 1}</p>
+              <p class="text-xs font-medium text-muted-foreground">Soal #{i + 1}</p>
               <div class="mt-1 text-sm text-foreground"><Html html={g.questionText} /></div>
               <div class="mt-2 rounded-lg bg-secondary/40 p-3">
                 <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -155,6 +156,10 @@
                   <p class="text-sm italic text-muted-foreground">Kosong</p>
                 {/if}
               </div>
+              {#if g.answerKey}
+                <p class="mt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Kunci jawaban</p>
+                <div class="mt-0.5 rounded-lg bg-emerald-50 p-3 text-sm text-foreground">{g.answerKey}</div>
+              {/if}
               <label class="mt-2 block text-sm">Nilai
                 <input bind:value={g.score} type="number" class="ml-2 h-9 w-24 rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
               </label>

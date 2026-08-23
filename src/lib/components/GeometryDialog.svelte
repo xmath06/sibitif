@@ -1,22 +1,29 @@
 <script lang="ts">
-  import { GEOMETRY_SHAPES, geometryShape, renderGeometry, geometryToDataUri, type GeometryItem } from '$lib/geometry';
+  import {
+    GEOMETRY_SHAPES,
+    geometryShape,
+    emptyScene,
+    addSceneItem,
+    fitSceneToContent,
+    resizeCanvasToContent,
+    sceneToDataUri,
+    type GeoScene
+  } from '$lib/geometry';
   import Button from '$components/ui/Button.svelte';
+  import GeometryCanvas from './GeometryCanvas.svelte';
   import { X, Plus, Trash2 } from 'lucide-svelte';
 
   let {
     open = false,
     onClose = () => {},
-    onInsert = (_src: string, _alt: string) => {}
+    onInsert = (_src: string, _alt: string, _zoom?: number, _offset?: string) => {},
+    onPick
   }: {
     open?: boolean;
     onClose?: () => void;
-    onInsert?: (src: string, alt: string) => void;
+    onInsert?: (src: string, alt: string, zoom?: number, offset?: string) => void;
+    onPick?: (shapeId: string, params: Record<string, number>) => void;
   } = $props();
-
-  interface Item extends GeometryItem {}
-  let items = $state<Item[]>([{ shapeId: 'square', params: {} }]);
-  let showVertices = $state(true);
-  let showSides = $state(false);
 
   function defaultParams(id: string): Record<string, number> {
     const def = geometryShape(id);
@@ -25,49 +32,93 @@
     return p;
   }
 
-  function addItem() {
-    const id = 'square';
-    items = [...items, { shapeId: id, params: defaultParams(id) }];
-  }
-  function removeItem(i: number) {
-    items = items.filter((_, idx) => idx !== i);
-  }
-  function setShape(i: number, id: string) {
-    items = items.map((it, idx) => (idx === i ? { ...it, shapeId: id, params: defaultParams(id) } : it));
-  }
-  function setParam(i: number, key: string, v: number) {
-    items = items.map((it, idx) => (idx === i ? { ...it, params: { ...it.params, [key]: v } } : it));
-  }
-  function setLabelStart(i: number, v: string) {
-    items = items.map((it, idx) => (idx === i ? { ...it, labelStart: v.toUpperCase() } : it));
+  function freshScene(): GeoScene {
+    const s: GeoScene = { ...emptyScene(), width: 320, height: 240 };
+    return fitSceneToContent(addSceneItem(s, 'square', defaultParams('square')));
   }
 
-  // Pratinjau memakai per-item toggle agar sesuai hasil akhir.
-  const previewItems = $derived.by(() =>
-    items.map((it) => ({ ...it, showVertices, showSides }))
-  );
+  let scene = $state<GeoScene>(freshScene());
+  let showVertices = $state(true);
+  let showSides = $state(false);
+  let showEdgeLengths = $state(false);
+
+  function addItem() {
+    const s = addSceneItem(scene, 'square', defaultParams('square'));
+    const last = s.items[s.items.length - 1];
+    last.showVertices = showVertices;
+    last.showSides = showSides;
+    last.showEdgeLengths = showEdgeLengths;
+    scene = resizeCanvasToContent(s);
+  }
+  function removeItem(i: number) {
+    const id = scene.items[i]?.id;
+    scene = resizeCanvasToContent({
+      ...scene,
+      items: scene.items
+        .filter((_, idx) => idx !== i)
+        .map((it) => (it.parentId === id ? { ...it, parentId: undefined } : it))
+    });
+  }
+  function setShape(i: number, id: string) {
+    scene = resizeCanvasToContent({
+      ...scene,
+      items: scene.items.map((it, idx) => (idx === i ? { ...it, shapeId: id, params: defaultParams(id) } : it))
+    });
+  }
+  function setParam(i: number, key: string, v: number) {
+    if (!Number.isFinite(v) || v <= 0) return;
+    scene = resizeCanvasToContent({
+      ...scene,
+      items: scene.items.map((it, idx) => (idx === i ? { ...it, params: { ...it.params, [key]: v } } : it))
+    });
+  }
+  function setLabelStart(i: number, v: string) {
+    scene = {
+      ...scene,
+      items: scene.items.map((it, idx) => (idx === i ? { ...it, labelStart: v.toUpperCase() } : it))
+    };
+  }
+  function setShowVertices(v: boolean) {
+    showVertices = v;
+    scene = { ...scene, items: scene.items.map((it) => ({ ...it, showVertices: v })) };
+  }
+  function setShowSides(v: boolean) {
+    showSides = v;
+    scene = { ...scene, items: scene.items.map((it) => ({ ...it, showSides: v })) };
+  }
+  function setShowEdgeLengths(v: boolean) {
+    showEdgeLengths = v;
+    scene = { ...scene, items: scene.items.map((it) => ({ ...it, showEdgeLengths: v })) };
+  }
+
   const previewSrc = $derived.by(() => {
     try {
-      const s = renderGeometry({ items: previewItems });
-      return s ? geometryToDataUri(s) : '';
+      return scene.items.length ? sceneToDataUri(fitSceneToContent(scene)) : '';
     } catch {
       return '';
     }
   });
 
   function insert() {
-    if (!previewSrc || !items.length) return;
-    const labels = items.map((it, i) => {
-      const d = geometryShape(it.shapeId);
-      return `(${String.fromCharCode(97 + i)}) ${d?.label.toLowerCase() ?? ''}`;
-    });
+    if (!previewSrc || !scene.items.length) return;
+    if (onPick) {
+      onPick(scene.items[0].shapeId, scene.items[0].params);
+      onClose();
+      return;
+    }
+    const labels = scene.items.map(
+      (it, i) => `(${String.fromCharCode(97 + i)}) ${geometryShape(it.shapeId)?.label.toLowerCase() ?? ''}`
+    );
     onInsert(previewSrc, `Gambar ${labels.join(' ')}`);
     onClose();
   }
 
   $effect(() => {
     if (open) {
-      items = [{ shapeId: 'square', params: defaultParams('square') }];
+      scene = freshScene();
+      showVertices = true;
+      showSides = false;
+      showEdgeLengths = false;
     }
   });
 </script>
@@ -81,29 +132,35 @@
     onclick={(e) => e.target === e.currentTarget && onClose()}
     onkeydown={(e) => e.key === 'Escape' && onClose()}
   >
-    <div class="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-card p-5 shadow-xl animate-fade-in">
+    <div class="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl bg-card p-5 shadow-xl animate-fade-in">
       <div class="mb-4 flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-foreground">Bangun Geometri</h3>
+        <h3 class="text-sm font-semibold text-foreground">Bangun Geometri (susun & gabungkan)</h3>
         <button onclick={onClose} class="text-muted-foreground hover:text-foreground"><X class="h-5 w-5" /></button>
       </div>
 
       <div class="space-y-4">
         <div class="space-y-3">
           <div class="flex items-center justify-between">
-            <span class="text-sm font-medium">Bangun dalam gambar ({items.length})</span>
+            <span class="text-sm font-medium">Bangun dalam gambar ({scene.items.length})</span>
             <Button variant="outline" size="sm" onclick={addItem}><Plus class="h-3.5 w-3.5" /> Tambah bangun</Button>
           </div>
 
-          {#each items as it, i (i)}
+          {#each scene.items as it, i (it.id)}
             <div class="rounded-xl border border-border p-3">
               <div class="mb-2 flex items-center justify-between">
                 <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bangun {String.fromCharCode(97 + i)}</span>
-                <Button variant="ghost" size="icon" onclick={() => removeItem(i)} disabled={items.length <= 1}><Trash2 class="h-4 w-4 text-rose-600" /></Button>
+                <Button variant="ghost" size="icon" onclick={() => removeItem(i)} disabled={scene.items.length <= 1}
+                  ><Trash2 class="h-4 w-4 text-rose-600" /></Button
+                >
               </div>
               <div class="grid grid-cols-3 gap-3">
                 <div class="col-span-3 flex items-end gap-3">
                   <div class="min-w-0 flex-1">
-                    <select value={it.shapeId} onchange={(e) => setShape(i, (e.currentTarget as HTMLSelectElement).value)} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
+                    <select
+                      value={it.shapeId}
+                      onchange={(e) => setShape(i, (e.currentTarget as HTMLSelectElement).value)}
+                      class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
                       <optgroup label="2D">
                         {#each GEOMETRY_SHAPES.filter((s) => s.kind === '2d') as s (s.id)}
                           <option value={s.id}>{s.label}</option>
@@ -148,21 +205,24 @@
 
         <div class="flex flex-wrap gap-4">
           <label class="flex items-center gap-2 text-sm">
-            <input type="checkbox" bind:checked={showVertices} class="h-4 w-4 rounded border-border accent-primary" />
+            <input type="checkbox" checked={showVertices} onchange={(e) => setShowVertices((e.currentTarget as HTMLInputElement).checked)} class="h-4 w-4 rounded border-border accent-primary" />
             Label titik sudut (A, B, C, …)
           </label>
           <label class="flex items-center gap-2 text-sm">
-            <input type="checkbox" bind:checked={showSides} class="h-4 w-4 rounded border-border accent-primary" />
+            <input type="checkbox" checked={showSides} onchange={(e) => setShowSides((e.currentTarget as HTMLInputElement).checked)} class="h-4 w-4 rounded border-border accent-primary" />
             Tampilkan panjang sisi
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={showEdgeLengths} onchange={(e) => setShowEdgeLengths((e.currentTarget as HTMLInputElement).checked)} class="h-4 w-4 rounded border-border accent-primary" />
+            Label panjang rusuk (tabung/kerucut/bola)
           </label>
         </div>
 
-        <div class="overflow-x-auto rounded-lg border border-border bg-slate-50 p-2">
-          {#if previewSrc}
-            <img src={previewSrc} alt="Pratinjau bangun geometri" class="mx-auto max-h-72 w-auto" />
-          {:else}
-            <div class="grid h-40 place-items-center text-sm text-muted-foreground"><span>Gagal merender bangun.</span></div>
-          {/if}
+        <div>
+          <p class="mb-2 text-xs text-muted-foreground">
+            Tarik tiap bangun untuk memindahkan · tarik titik biru di pojok untuk mengubah ukuran · gabungkan dengan mendekatkan bangun.
+          </p>
+          <GeometryCanvas bind:scene={scene} editable={true} showToolbar={false} />
         </div>
       </div>
 

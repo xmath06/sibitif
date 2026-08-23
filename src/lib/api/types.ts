@@ -20,7 +20,7 @@ export type Religion =
   | 'KONGHUCU'
   | 'OTHER';
 
-export type QuestionType = 'MCQ' | 'ESSAY' | 'TRUE_FALSE' | 'POLY_CHOICE' | 'MULTI_SELECT';
+export type QuestionType = 'MCQ' | 'ESSAY' | 'TRUE_FALSE' | 'POLY_CHOICE' | 'MULTI_SELECT' | 'URAIAN_PENDEK';
 export type StudentExamStatus =
   | 'NOT_STARTED'
   | 'IN_PROGRESS'
@@ -59,6 +59,7 @@ export interface Question {
   questionType: QuestionType;
   minWordCount?: number | null;
   maxWordCount?: number | null;
+  answerKey?: string | null;
   options: QuestionOption[];
   savedAnswers?: {
     selectedOptionId?: string | null;

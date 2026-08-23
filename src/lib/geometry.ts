@@ -3,8 +3,15 @@
 // Tanpa dependensi eksternal. Sudut-sudut yang berurutan diberi huruf sesuai arah gambar.
 
 const TAU = Math.PI * 2;
+// Margin (px) yang disisakan antara isi bangun dan tepi kanvas SVG agar
+// goresan (stroke) & label tidak terpotong di pinggir.
+const FREE_MARGIN = 1;
+
+// Style SVG bersama (dipakai oleh renderGeometry, renderShapeSvg, renderScene).
+export const GEOMETRY_STYLE = `<style>line{stroke:#1e3a8a;stroke-width:2;stroke-linecap:round}.dashed{stroke-dasharray:5 4}.edge{fill:none;stroke:#1e3a8a;stroke-width:2}.dim{stroke:#94a3b8;stroke-width:1}.pt{fill:#1e3a8a}.lbl{font-family:Arial,sans-serif;font-size:14px;fill:#1e3a8a;font-style:italic}.dimlabel{font-family:Arial,sans-serif;font-size:11px;fill:#64748b}.caption{font-family:Arial,sans-serif;font-size:12px;fill:#334155}</style>`;
 
 interface Pt { x: number; y: number }
+interface Pt3 { x: number; y: number; z: number }
 
 export interface GeometryShapeDef {
   id: string;
@@ -51,17 +58,6 @@ function fmt(v: number): string {
 function fmtLen(v: number): string {
   if (Object.is(v, -0)) v = 0;
   return String(Math.round(v * 100) / 100);
-}
-
-function mulberry32(seed: number) {
-  let a = seed;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 // Jarak 2 titik (untuk label panjang sisi)
@@ -146,11 +142,12 @@ function build2D(def: GeometryShapeDef, p: Record<string, number>): Shape {
       break;
     }
     case 'semicircle': {
-      s.pts = [{ x: -p.r, y: 0 }, { x: p.r, y: 0 }];
+      // Titik ujung hanya dipakai untuk diameter; busur digambar terpisah.
+      s.pts = [];
       s.center = { x: 0, y: 0 };
       s.radius = p.r;
       s.centerLabel = 'O';
-      s.extraLines = [{ a: { x: -p.r, y: 0 }, b: { x: 0, y: 0 } }, { a: { x: -p.r, y: 0 }, b: { x: p.r, y: 0 } }];
+      s.extraLines = [{ a: { x: -p.r, y: 0 }, b: { x: p.r, y: 0 } }];
       s.dimSides = false;
       break;
     }
@@ -160,22 +157,35 @@ function build2D(def: GeometryShapeDef, p: Record<string, number>): Shape {
   return s;
 }
 
-// Proyeksi isometrik: (x,y,z) → (x', y'). z ke atas.
-function iso(p: { x: number; y: number; z: number }): Pt {
-  return { x: p.x - p.y, y: (p.x + p.y) / 2 - p.z };
+// Proyeksi kabinet (dimetric): bidang depan (y=0) dalam bentuk asli, kedalaman (y)
+// mundur miring ke kanan-atas, z ke atas. Semua 8 sudut bangun ruang terpisah → tidak
+// ada yang bertumpuk. (Proyeksi isometrik lama memetakan sudut berlawanan kubus
+// (0,0,0) & (s,s,s) ke titik yang sama → tampak segi enam.)
+function iso(p: Pt3): Pt {
+  return { x: p.x + p.y * 0.5, y: -p.z - p.y * 0.5 };
 }
 
 // Build 3D → kumpulan garis + label
-function build3D(def: GeometryShapeDef, p: Record<string, number>): { lines: { a: Pt; b: Pt; dashed?: boolean }[]; pts: Pt[]; dimLines: { a: Pt; b: Pt; value: number }[] } {
+function build3D(def: GeometryShapeDef, p: Record<string, number>): {
+  lines: { a: Pt; b: Pt; dashed?: boolean }[];
+  pts: Pt[];
+  dimLines: { a: Pt; b: Pt; value: number }[];
+  circles: { cx: number; cy: number; r: number }[];
+  ellipses: { cx: number; cy: number; rx: number; ry: number }[];
+  edgeLines: { a: Pt; b: Pt; value: number }[];
+} {
   const lines: { a: Pt; b: Pt; dashed?: boolean }[] = [];
   const pts: Pt[] = [];
   const dimLines: { a: Pt; b: Pt; value: number }[] = [];
+  const circles: { cx: number; cy: number; r: number }[] = [];
+  const ellipses: { cx: number; cy: number; rx: number; ry: number }[] = [];
+  const edgeLines: { a: Pt; b: Pt; value: number }[] = [];
 
-  const seg = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }, dashed = false) =>
+  const seg = (a: Pt3, b: Pt3, dashed = false) =>
     lines.push({ a: iso(a), b: iso(b), dashed });
 
-  const mark = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
-    dimLines.push({ a: iso(a), b: iso(b), value: dist(iso(a), iso(b)) });
+  const mark = (a: Pt3, b: Pt3) =>
+    dimLines.push({ a: iso(a), b: iso(b), value: Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) });
 
   switch (def.id) {
     case 'cube': {
@@ -186,11 +196,11 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): { lines: { a
       ];
       pts3.forEach((v) => pts.push(iso(v)));
       // alas
-      seg(pts3[0], pts3[1]); seg(pts3[1], pts3[2]); seg(pts3[2], pts3[3]); seg(pts3[3], pts3[0]);
+      seg(pts3[0], pts3[1]); seg(pts3[1], pts3[2]); seg(pts3[2], pts3[3], true); seg(pts3[3], pts3[0], true);
       // atas
       seg(pts3[4], pts3[5]); seg(pts3[5], pts3[6]); seg(pts3[6], pts3[7]); seg(pts3[7], pts3[4]);
       // tegak
-      seg(pts3[0], pts3[4]); seg(pts3[1], pts3[5]); seg(pts3[2], pts3[6], true); seg(pts3[3], pts3[7]);
+      seg(pts3[0], pts3[4]); seg(pts3[1], pts3[5]); seg(pts3[2], pts3[6]); seg(pts3[3], pts3[7], true);
       mark(pts3[0], pts3[1]);
       mark(pts3[1], pts3[2]);
       mark(pts3[0], pts3[4]);
@@ -203,9 +213,9 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): { lines: { a
         { x: 0, y: 0, z: T }, { x: P, y: 0, z: T }, { x: P, y: L, z: T }, { x: 0, y: L, z: T }
       ];
       pts3.forEach((v) => pts.push(iso(v)));
-      seg(pts3[0], pts3[1]); seg(pts3[1], pts3[2]); seg(pts3[2], pts3[3]); seg(pts3[3], pts3[0]);
+      seg(pts3[0], pts3[1]); seg(pts3[1], pts3[2]); seg(pts3[2], pts3[3], true); seg(pts3[3], pts3[0], true);
       seg(pts3[4], pts3[5]); seg(pts3[5], pts3[6]); seg(pts3[6], pts3[7]); seg(pts3[7], pts3[4]);
-      seg(pts3[0], pts3[4]); seg(pts3[1], pts3[5]); seg(pts3[2], pts3[6], true); seg(pts3[3], pts3[7]);
+      seg(pts3[0], pts3[4]); seg(pts3[1], pts3[5]); seg(pts3[2], pts3[6]); seg(pts3[3], pts3[7], true);
       mark(pts3[0], pts3[1]);
       mark(pts3[1], pts3[2]);
       mark(pts3[0], pts3[4]);
@@ -220,21 +230,37 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): { lines: { a
       for (let i = 0; i <= N; i++) {
         const a = (i / N) * TAU;
         const v = { x: r * Math.cos(a), y: r * Math.sin(a), z: 0 };
-        bot.push(iso(v));
+        bot.push({x: 200 + (v.x - v.y * Math.cos(Math.PI / 2) * 0.5) * 40,
+        y: 200 - (v.z + v.y * Math.sin(Math.PI / 2) * 0.5) * 40});
         const v2 = { x: r * Math.cos(a), y: r * Math.sin(a), z: h };
-        top.push(iso(v2));
+        top.push({x: 200 + (v2.x - v2.y * Math.cos(Math.PI / 2) * 0.5) * 40,
+        y: 200 - (v2.z + v2.y * Math.sin(Math.PI / 2) * 0.5) * 40});
       }
-      // garis sisi: titik terjauh kiri/kanan dari elips
-      const left = bot[Math.floor(N * 0.75)]; // arah y negatif (kiri dalam iso)
-      const right = bot[Math.floor(N * 0.25)];
-      seg({ x: left.x, y: left.y, z: 0 }, { x: left.x, y: left.y, z: h });
-      seg({ x: right.x, y: right.y, z: 0 }, { x: right.x, y: right.y, z: h });
+      // 2. Garis tegak sisi kiri dan kanan (langsung di-push ke `lines` 2D)
+      const leftBot2D  = { x: 200 + (-r) * 40, y: 200 };
+      const leftTop2D  = { x: 200 + (-r) * 40, y: 200 - h * 40 };
+      const rightBot2D = { x: 200 + r * 40,    y: 200 };
+      const rightTop2D = { x: 200 + r * 40,    y: 200 - h * 40 };
+
+      lines.push({ a: leftBot2D,  b: leftTop2D,  dashed: false });
+      lines.push({ a: rightBot2D, b: rightTop2D, dashed: false });
       // elips sebagai polyline
       pts.push(...bot, ...top);
-      lines.push(...bot.slice(0, N).map((p2, i) => ({ a: p2, b: bot[i + 1] })));
-      lines.push(...top.slice(0, N).map((p2, i) => ({ a: p2, b: top[i + 1] })));
-      mark({ x: 0, y: 0, z: 0 }, { x: r, y: 0, z: 0 });
-      mark({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: h });
+      lines.push(...bot.slice(0, N).map((p2, i) => ({
+        a: p2,
+        b: bot[i + 1],
+        dashed: Math.sin(((i + 0.5) / N) * TAU) > 0
+      })));
+      lines.push(...top.slice(0, N).map((p2, i) => ({
+        a: p2,
+        b: top[i + 1],
+        dashed: false
+      })));
+      // dimensi: jari-jari alas & tinggi (koordinat proyeksi sama)
+      dimLines.push({ a: { x: 200, y: 200 }, b: { x: 200 + r * 40, y: 200 }, value: r });
+      dimLines.push({ a: { x: 200, y: 200 }, b: { x: 200, y: 200 - h * 40 }, value: h });
+      // rusuk: jari-jari alas (bisa diberi label panjang)
+      edgeLines.push({ a: { x: 200, y: 200 }, b: { x: 200 + r * 40, y: 200 }, value: r });
       break;
     }
     case 'cone': {
@@ -243,43 +269,43 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): { lines: { a
       const bot: Pt[] = [];
       for (let i = 0; i <= N; i++) {
         const a = (i / N) * TAU;
-        bot.push(iso({ x: r * Math.cos(a), y: r * Math.sin(a), z: 0 }));
+        const v = { x: r * Math.cos(a), y: r * Math.sin(a), z: 0 };
+        bot.push({ x: 200 + v.x * 40, y: 200 - (v.z + v.y * 0.5) * 40 });
       }
-      const apex = iso({ x: 0, y: 0, z: h });
+      // puncak tepat di atas pusat alas
+      const apex = { x: 200, y: 200 - h * 40 };
       pts.push(apex, ...bot);
-      const left = bot[Math.floor(N * 0.75)];
-      const right = bot[Math.floor(N * 0.25)];
-      seg({ x: left.x, y: left.y, z: 0 }, { x: 0, y: 0, z: h });
-      seg({ x: right.x, y: right.y, z: 0 }, { x: 0, y: 0, z: h });
-      lines.push(...bot.slice(0, N).map((p2, i) => ({ a: p2, b: bot[i + 1] })));
-      mark({ x: 0, y: 0, z: 0 }, { x: r, y: 0, z: 0 });
-      mark({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: h });
+      // dua garis pelukis (siluet) dari puncak ke ujung kiri/kanan alas
+      const leftBot2D = { x: 200 - r * 40, y: 200 };
+      const rightBot2D = { x: 200 + r * 40, y: 200 };
+      lines.push({ a: apex, b: leftBot2D });
+      lines.push({ a: apex, b: rightBot2D });
+      // busur alas: depan (sin a < 0) solid, belakang (sin a > 0) putus-putus
+      lines.push(...bot.slice(0, N).map((p2, i) => ({
+        a: p2,
+        b: bot[i + 1],
+        dashed: Math.sin(((i + 0.5) / N) * TAU) > 0
+      })));
+      // dimensi: jari-jari alas & tinggi (koordinat proyeksi sama)
+      dimLines.push({ a: { x: 200, y: 200 }, b: { x: 200 + r * 40, y: 200 }, value: r });
+      dimLines.push({ a: { x: 200, y: 200 }, b: apex, value: h });
+      // rusuk: jari-jari alas (bisa diberi label panjang)
+      edgeLines.push({ a: { x: 200, y: 200 }, b: { x: 200 + r * 40, y: 200 }, value: r });
       break;
     }
     case 'sphere': {
       const r = p.r;
-      const N = 40;
-      const ring: Pt[] = [];
-      for (let i = 0; i <= N; i++) {
-        const a = (i / N) * TAU;
-        ring.push(iso({ x: r * Math.cos(a), y: r * Math.sin(a), z: 0 }));
-      }
-      pts.push(...ring);
-      lines.push(...ring.slice(0, N).map((p2, i) => ({ a: p2, b: ring[i + 1] })));
-      // elips meridian
-      const mer: Pt[] = [];
-      for (let i = 0; i <= N; i++) {
-        const a = (i / N) * TAU;
-        mer.push(iso({ x: r * Math.cos(a), y: 0, z: r * Math.sin(a) }));
-      }
-      lines.push(...mer.slice(0, N).map((p2, i) => ({ a: p2, b: mer[i + 1], dashed: true })));
-      const mer2: Pt[] = [];
-      for (let i = 0; i <= N; i++) {
-        const a = (i / N) * TAU;
-        mer2.push(iso({ x: 0, y: r * Math.cos(a), z: r * Math.sin(a) }));
-      }
-      lines.push(...mer2.slice(0, N).map((p2, i) => ({ a: p2, b: mer2[i + 1], dashed: true })));
+      // Bola digambar sebagai lingkaran (siluet) + 2 elips internal (ekuator & meridian)
+      // agar terbaca sebagai bangun ruang, bukan sekadar lingkaran datar.
+      // Titik ±r di ruang unit dipakai agar bounds() mencakup seluruh lingkaran.
+      pts.push({ x: r, y: r }, { x: -r, y: -r }, { x: r, y: -r }, { x: -r, y: r });
+      circles.push({ cx: 0, cy: 0, r });
+      ellipses.push({ cx: 0, cy: 0, rx: r, ry: r * 0.34 });
+      ellipses.push({ cx: 0, cy: 0, rx: r * 0.34, ry: r });
+      // jari-jari dari pusat ke tepi kanan lingkaran
       mark({ x: 0, y: 0, z: 0 }, { x: r, y: 0, z: 0 });
+      // rusuk: jari-jari bola (bisa diberi label panjang)
+      edgeLines.push({ a: { x: 0, y: 0 }, b: { x: r, y: 0 }, value: r });
       break;
     }
     case 'tri_prism': {
@@ -292,7 +318,7 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): { lines: { a
       const tri2 = tri.map((v) => ({ x: v.x, y: v.y + dep, z: v.z }));
       [...tri, ...tri2].forEach((v) => pts.push(iso(v)));
       seg(tri[0], tri[1]); seg(tri[1], tri[2]); seg(tri[2], tri[0]);
-      seg(tri2[0], tri2[1]); seg(tri2[1], tri2[2]); seg(tri2[2], tri2[0]);
+      seg(tri2[0], tri2[1], true); seg(tri2[1], tri2[2], true); seg(tri2[2], tri2[0], true);
       seg(tri[0], tri2[0]); seg(tri[1], tri2[1], true); seg(tri[2], tri2[2]);
       mark(tri[0], tri[1]);
       mark(tri[0], tri2[0]);
@@ -320,7 +346,7 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): { lines: { a
     default:
       break;
   }
-  return { lines, pts, dimLines };
+  return { lines, pts, dimLines, circles, ellipses, edgeLines };
 }
 
 // Hitung bounding box dari sekumpulan titik + radius (lingkaran)
@@ -359,6 +385,8 @@ export interface GeometryItem {
   params: Record<string, number>;
   showVertices?: boolean;
   showSides?: boolean;
+  showEdgeLengths?: boolean;
+  skipLabels?: boolean;
   labelStart?: string;
 }
 
@@ -369,7 +397,83 @@ export interface GeometryOptions {
   height?: number;
 }
 
+function resolvedParams(def: GeometryShapeDef, params: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(def.params.map((param) => {
+    const value = params[param.key];
+    return [param.key, Number.isFinite(value) && value > 0 ? value : param.def];
+  }));
+}
+
 // Bangun inner-element SVG untuk satu bangun, muat dalam viewport w×h (sudah di-scale).
+export interface LabelInfo {
+  px: number; // posisi titik sudut (koordinat box)
+  py: number;
+  ax: number; // posisi anchor teks (sudah di-offset)
+  ay: number;
+  anchor: string;
+  fixed?: string; // teks tetap (mis. 'O' untuk pusat lingkaran)
+}
+
+/** Kumpulkan info titik sudut yang akan diberi label, memakai sx/sy yang diberi. */
+function collectLabels(
+  def: GeometryShapeDef,
+  p: Record<string, number>,
+  sx: (x: number) => number,
+  sy: (y: number) => number
+): LabelInfo[] {
+  const safe = resolvedParams(def, p);
+  let shape: Shape = { pts: [] };
+  let allPts: Pt[] = [];
+  let center: Pt | undefined;
+  let centerLabel: string | undefined;
+  if (def.kind === '2d') {
+    shape = build2D(def, safe);
+    allPts = shape.pts;
+    center = shape.center;
+    centerLabel = shape.centerLabel;
+  } else {
+    const r = build3D(def, safe);
+    allPts = r.pts;
+  }
+  const out: LabelInfo[] = [];
+  const skipVertex = def.kind === '2d' && (def.id === 'circle' || def.id === 'semicircle');
+  const skip3D = def.kind === '3d' && (def.id === 'cylinder' || def.id === 'sphere' || def.id === 'cone');
+  if (!skipVertex && !skip3D) {
+    const targets = def.kind === '2d' ? shape.pts : allPts;
+    const n = def.kind === '3d' ? Math.min(targets.length, def.id === 'tri_prism' || def.id === 'pyramid' ? 6 : 8) : targets.length;
+    const cx = centroid(targets).x;
+    const cy = centroid(targets).y;
+    for (let i = 0; i < n; i++) {
+      const pt = targets[i];
+      if (!pt) continue;
+      const px = sx(pt.x);
+      const py = sy(pt.y);
+      let vx = px - sx(cx);
+      let vy = py - sy(cy);
+      const len = Math.hypot(vx, vy);
+      if (len < 1e-6) {
+        vx = 14;
+        vy = -14;
+      } else {
+        vx = (vx / len) * 18;
+        vy = (vy / len) * 18;
+      }
+      let anchor = 'middle';
+      if (vx > 6) anchor = 'start';
+      else if (vx < -6) anchor = 'end';
+      out.push({ px, py, ax: px + vx, ay: py + vy + 4, anchor });
+    }
+  }
+  if (def.kind === '2d' && center && centerLabel) {
+    out.push({ px: sx(center.x), py: sy(center.y), ax: sx(center.x) + 8, ay: sy(center.y) - 6, anchor: 'middle', fixed: centerLabel });
+  }
+  if (def.kind === '3d' && def.id === 'sphere') {
+    // Pusat bola = titik asal (0,0,0) → koordinat unit (0,0)
+    out.push({ px: sx(0), py: sy(0), ax: sx(0) + 8, ay: sy(0) - 6, anchor: 'middle', fixed: 'O' });
+  }
+  return out;
+}
+
 // `idSuffix` agar class/id unik bila dipakai banyak bangun dalam satu svg.
 function renderItemInner(
   def: GeometryShapeDef,
@@ -378,18 +482,25 @@ function renderItemInner(
   showSides: boolean,
   w: number,
   h: number,
-  labelStart = 'A'
+  labelStart = 'A',
+  pxPerUnit?: number,
+  skipLabels = false,
+  showEdgeLengths = false
 ): string[] {
   const parts: string[] = [];
+  const safeParams = resolvedParams(def, p);
 
   let shape: Shape = { pts: [] };
   let lines: { a: Pt; b: Pt; dashed?: boolean }[] = [];
   let dimLines: { a: Pt; b: Pt; value: number }[] = [];
   let allPts: Pt[] = [];
+  let circles: { cx: number; cy: number; r: number }[] = [];
+  let ellipses: { cx: number; cy: number; rx: number; ry: number }[] = [];
+  let edgeLines: { a: Pt; b: Pt; value: number }[] = [];
   let radius: number | undefined;
 
   if (def.kind === '2d') {
-    shape = build2D(def, p);
+    shape = build2D(def, safeParams);
     allPts = shape.pts;
     radius = shape.radius;
     // sisi poligon: hubungkan titik-titik sudut (urutan mengelilingi)
@@ -404,24 +515,63 @@ function renderItemInner(
       radius = shape.radius;
     }
   } else {
-    const r = build3D(def, p);
+    const r = build3D(def, safeParams);
     lines = r.lines;
     dimLines = r.dimLines;
     allPts = r.pts;
+    circles = r.circles;
+    ellipses = r.ellipses;
+    edgeLines = r.edgeLines;
   }
 
   const b = bounds(allPts, radius);
-  const pad = 30;
-  const scale = Math.min((w - pad * 2) / (b.maxX - b.minX), (h - pad * 2) / (b.maxY - b.minY));
-  const ox = (w - (b.minX + b.maxX) * scale) / 2;
-  const oy = (h - (b.minY + b.maxY) * scale) / 2;
-  const sx = (x: number) => ox + x * scale;
-  const sy = (y: number) => oy + y * scale;
+  let sx: (x: number) => number;
+  let sy: (y: number) => number;
+  let scale = 1;
+  if (pxPerUnit && pxPerUnit > 0) {
+    // mode freeform: koordinat natural × pxPerUnit, dengan margin agar tak terpotong
+    const P = pxPerUnit;
+    scale = P;
+    const ox = FREE_MARGIN - b.minX * scale;
+    const oy = FREE_MARGIN - b.minY * scale;
+    sx = (x) => ox + x * scale;
+    sy = (y) => oy + y * scale;
+  } else {
+    const pad = 30;
+    scale = Math.min((w - pad * 2) / (b.maxX - b.minX), (h - pad * 2) / (b.maxY - b.minY));
+    const ox = (w - (b.minX + b.maxX) * scale) / 2;
+    const oy = (h - (b.minY + b.maxY) * scale) / 2;
+    sx = (x) => ox + x * scale;
+    sy = (y) => oy + y * scale;
+  }
 
   // Gambar segmen
   for (const l of lines) {
     const cls = l.dashed ? 'dashed' : '';
     parts.push(`<line class="${cls}" x1="${fmt(sx(l.a.x))}" y1="${fmt(sy(l.a.y))}" x2="${fmt(sx(l.b.x))}" y2="${fmt(sy(l.b.y))}"/>`);
+  }
+
+  // Lingkaran & elips (bola) — bangun ruang
+  for (const c of circles) {
+    parts.push(`<circle class="edge" cx="${fmt(sx(c.cx))}" cy="${fmt(sy(c.cy))}" r="${fmt(c.r * scale)}"/>`);
+  }
+  for (const e of ellipses) {
+    parts.push(`<ellipse class="edge" cx="${fmt(sx(e.cx))}" cy="${fmt(sy(e.cy))}" rx="${fmt(e.rx * scale)}" ry="${fmt(e.ry * scale)}"/>`);
+  }
+
+  // Rusuk (jari-jari) tabung(alas)/kerucut/bola + label panjangnya
+  if (showEdgeLengths) {
+    for (const el of edgeLines) {
+      parts.push(`<line class="edge" x1="${fmt(sx(el.a.x))}" y1="${fmt(sy(el.a.y))}" x2="${fmt(sx(el.b.x))}" y2="${fmt(sy(el.b.y))}"/>`);
+      const mx = (el.a.x + el.b.x) / 2;
+      const my = (el.a.y + el.b.y) / 2;
+      const dx = el.b.x - el.a.x;
+      const dy = el.b.y - el.a.y;
+      const dl = Math.hypot(dx, dy) || 1;
+      const ox = (-dy / dl) * 12;
+      const oy = (dx / dl) * 12;
+      parts.push(`<text class="dimlabel" x="${fmt(sx(mx) + ox)}" y="${fmt(sy(my) + oy + 4)}" text-anchor="middle">${fmtLen(el.value)}</text>`);
+    }
   }
 
   // Lingkaran penuh / setengah lingkaran (busur atas)
@@ -430,7 +580,8 @@ function renderItemInner(
     const cx = sx(shape.center.x);
     const cy = sy(shape.center.y);
     if (def.id === 'semicircle') {
-      parts.push(`<path d="M ${fmt(cx - r2)} ${fmt(cy)} A ${fmt(r2)} ${fmt(r2)} 0 0 1 ${fmt(cx + r2)} ${fmt(cy)}" fill="none" stroke="#1e3a8a" stroke-width="2"/>`);
+      // SVG y grows downward; sweep=0 makes the arc rise above the diameter.
+      parts.push(`<path d="M ${fmt(cx - r2)} ${fmt(cy)} A ${fmt(r2)} ${fmt(r2)} 0 0 0 ${fmt(cx + r2)} ${fmt(cy)}" fill="none" stroke="#1e3a8a" stroke-width="2"/>`);
     } else {
       parts.push(`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r2)}" fill="none" stroke="#1e3a8a" stroke-width="2"/>`);
     }
@@ -438,42 +589,17 @@ function renderItemInner(
 
   // Titik sudut
   if (showVertices) {
-    if (def.kind === '2d' && shape.center && shape.centerLabel) {
-      parts.push(`<text class="lbl" x="${fmt(sx(shape.center.x) + 8)}" y="${fmt(sy(shape.center.y) - 6)}">${shape.centerLabel}</text>`);
-    }
-    const skip3DLabels = def.kind === '3d' && (def.id === 'cylinder' || def.id === 'sphere' || def.id === 'cone');
-    if (!skip3DLabels) {
-      const labelTargets = def.kind === '2d' ? shape.pts : allPts;
-      const labelN = def.kind === '3d' ? Math.min(labelTargets.length, def.id === 'tri_prism' || def.id === 'pyramid' ? 6 : 8) : labelTargets.length;
-      const startIdx = Math.max(0, LETTERS.indexOf(labelStart.toUpperCase()));
-      // Label diletakkan "menjauh dari centroid" agar tidak menimpa garis bangun.
-      // Untuk titik yang berimpit dengan centroid (mis. pusat), gunakan offset diagonal tetap.
-      const cx = centroid(labelTargets).x;
-      const cy = centroid(labelTargets).y;
-      for (let i = 0; i < labelN; i++) {
-        const pt = labelTargets[i];
-        if (!pt) continue;
-        const letter = LETTERS[startIdx + i] ?? `P${i + 1}`;
-        parts.push(`<circle class="pt" cx="${fmt(sx(pt.x))}" cy="${fmt(sy(pt.y))}" r="2.5"/>`);
-        let vx = sx(pt.x) - sx(cx);
-        let vy = sy(pt.y) - sy(cy);
-        const len = Math.hypot(vx, vy);
-        if (len < 1e-6) {
-          // titik tepat di centroid (mis. limas tegak): geser diagonal agar tidak menimpa
-          vx = 14;
-          vy = -14;
-        } else {
-          vx = (vx / len) * 18;
-          vy = (vy / len) * 18;
-        }
-        let anchor = 'middle';
-        if (vx > 6) anchor = 'start';
-        else if (vx < -6) anchor = 'end';
-        parts.push(
-          `<text class="lbl" x="${fmt(sx(pt.x) + vx)}" y="${fmt(sy(pt.y) + vy + 4)}" text-anchor="${anchor}">${letter}</text>`
-        );
-      }
-    }
+    const infos = collectLabels(def, safeParams, sx, sy);
+    const startIdx = Math.max(0, LETTERS.indexOf(labelStart.toUpperCase()));
+    infos.forEach((info, i) => {
+      // titik sudut (dot) selalu digambar sebagai bagian geometri
+      parts.push(`<circle class="pt" cx="${fmt(info.px)}" cy="${fmt(info.py)}" r="2.5"/>`);
+      if (skipLabels) return; // teks label dipindah ke overlay scene (lihat computeSceneLabels)
+      const letter = info.fixed ?? LETTERS[startIdx + i] ?? `P${i + 1}`;
+      parts.push(
+        `<text class="lbl" x="${fmt(info.ax)}" y="${fmt(info.ay)}" text-anchor="${info.anchor}">${letter}</text>`
+      );
+    });
   }
 
   // Panjang sisi
@@ -495,6 +621,9 @@ function renderItemInner(
         const b = shape.pts[(i + 1) % shape.pts.length];
         drawDim(a, b, dist(a, b));
       }
+    }
+    if (def.id === 'semicircle' && shape.radius) {
+      drawDim({ x: -shape.radius, y: 0 }, { x: shape.radius, y: 0 }, shape.radius * 2);
     }
     for (const dl of dimLines) {
       drawDim(dl.a, dl.b, dl.value);
@@ -524,7 +653,7 @@ export function renderGeometry(opts: GeometryOptions): string {
 
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${items.length === 1 ? geometryShape(items[0].shapeId)!.label : 'Bangun geometri'}">`);
-  parts.push(`<style>line{stroke:#1e3a8a;stroke-width:2;stroke-linecap:round}.dashed{stroke-dasharray:5 4}.dim{stroke:#94a3b8;stroke-width:1}.pt{fill:#1e3a8a}.lbl{font-family:Arial,sans-serif;font-size:14px;fill:#1e3a8a;font-style:italic}.dimlabel{font-family:Arial,sans-serif;font-size:11px;fill:#64748b}.caption{font-family:Arial,sans-serif;font-size:12px;fill:#334155}</style>`);
+  parts.push(GEOMETRY_STYLE);
 
   items.forEach((it, idx) => {
     const def = geometryShape(it.shapeId)!;
@@ -555,3 +684,296 @@ export function geometryToDataUri(svg: string): string {
   for (const b of bytes) bin += String.fromCharCode(b);
   return `data:image/svg+xml;base64,${btoa(bin)}`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Model scene untuk kanvas interaktif: tiap bangun adalah objek bebas yang bisa
+// di-drag, di-skala, dan dijadikan parent/child (objek di dalam objek).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface GeoSceneItem {
+  id: string;
+  shapeId: string;
+  params: Record<string, number>;
+  x: number; // posisi di kanvas (px). Untuk child: relatif terhadap parent.
+  y: number;
+  scale: number; // faktor skala (1 = ukuran natural)
+  rotation?: number; // rotasi (derajat), searah jarum jam
+  parentId?: string; // hierarki parent-child
+  showVertices?: boolean;
+  showSides?: boolean;
+  showEdgeLengths?: boolean;
+  labelStart?: string;
+  z?: number; // urutan tumpuk (kecil = belakang)
+}
+
+export interface GeoScene {
+  width: number;
+  height: number;
+  items: GeoSceneItem[];
+}
+
+function uid(): string {
+  return 'g' + Math.random().toString(36).slice(2, 9);
+}
+
+export function emptyScene(width = 520, height = 380): GeoScene {
+  return { width, height, items: [] };
+}
+
+/** Ukuran piksel natural sebuah bangun (sebelum posisi/skala kanvas diterapkan). */
+export function shapePixelSize(item: GeometryItem, pxPerUnit = 24): { w: number; h: number } {
+  const def = geometryShape(item.shapeId);
+  if (!def) return { w: 0, h: 0 };
+  const p = resolvedParams(def, item.params ?? {});
+  const pts = def.kind === '2d' ? build2D(def, p).pts : build3D(def, p).pts;
+  const b = bounds(pts);
+  return {
+    w: (b.maxX - b.minX) * pxPerUnit + 2 * FREE_MARGIN,
+    h: (b.maxY - b.minY) * pxPerUnit + 2 * FREE_MARGIN
+  };
+}
+
+/** Jumlah titik sudut yang akan diberi label pada sebuah bangun (untuk penomoran unik). */
+export function geometryLabelCount(shapeId: string, params: Record<string, number> | undefined): number {
+  const def = geometryShape(shapeId);
+  if (!def) return 0;
+  const p = resolvedParams(def, params ?? {});
+  if (def.kind === '2d') {
+    if (def.id === 'circle' || def.id === 'semicircle') return 0;
+    return build2D(def, p).pts.length;
+  }
+  if (def.id === 'cylinder' || def.id === 'sphere' || def.id === 'cone') return 0;
+  const n = build3D(def, p).pts.length;
+  return def.id === 'tri_prism' || def.id === 'pyramid' ? Math.min(n, 6) : Math.min(n, 8);
+}
+
+/** Huruf ke-i untuk penomoran titik se-scene (A..Z, lalu A1, B1, …). */
+export function sceneLabelAt(index: number): string {
+  const base = LETTERS[index % LETTERS.length] ?? 'A';
+  const tier = Math.floor(index / LETTERS.length);
+  return tier === 0 ? base : `${base}${tier}`;
+}
+
+/** Render satu bangun menjadi SVG berdiri sendiri (ukuran natural × pxPerUnit). */
+export function renderShapeSvg(item: GeometryItem, pxPerUnit = 24): string {
+  const def = geometryShape(item.shapeId);
+  if (!def) return '';
+  const p = resolvedParams(def, item.params ?? {});
+  const parts = renderItemInner(def, p, item.showVertices ?? true, item.showSides ?? false, 0, 0, item.labelStart ?? 'A', pxPerUnit, item.skipLabels ?? false, item.showEdgeLengths ?? false);
+  const { w, h } = shapePixelSize(item, pxPerUnit);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(w)} ${fmt(h)}" width="${fmt(w)}" height="${fmt(h)}">${GEOMETRY_STYLE}${parts.join('')}</svg>`;
+}
+
+/** Posisi absolut (termasuk transform parent) dari sebuah item di kanvas. */
+export function resolveItemPos(scene: GeoScene, it: GeoSceneItem): { x: number; y: number; scale: number } {
+  const byId = new Map(scene.items.map((x) => [x.id, x]));
+  const seen = new Set<string>();
+  let x = it.x, y = it.y, s = it.scale;
+  let p = it.parentId ? byId.get(it.parentId) : undefined;
+  while (p && !seen.has(p.id)) {
+    seen.add(p.id);
+    x += p.x;
+    y += p.y;
+    s *= p.scale;
+    p = p.parentId ? byId.get(p.parentId) : undefined;
+  }
+  return { x, y, scale: s };
+}
+
+/** Render seluruh scene menjadi satu SVG statis (untuk tampilan siswa / ekspor). */
+function freeformMapping(def: GeometryShapeDef, params: Record<string, number>, ppu: number) {
+  const p = resolvedParams(def, params);
+  let shape: Shape = { pts: [] };
+  let allPts: Pt[] = [];
+  let radius: number | undefined;
+  if (def.kind === '2d') {
+    shape = build2D(def, p);
+    allPts = shape.pts;
+    radius = shape.radius;
+  } else {
+    const r = build3D(def, p);
+    allPts = r.pts;
+  }
+  const b = bounds(allPts, radius);
+  const scale = ppu;
+  const ox = -b.minX * scale;
+  const oy = -b.minY * scale;
+  return { sx: (x: number) => ox + x * scale, sy: (y: number) => oy + y * scale };
+}
+
+export interface SceneLabel {
+  x: number;
+  y: number;
+  letter: string;
+  anchor: string;
+}
+
+/**
+ * Hitung label titik sudut seluruh scene dalam koordinat scene (tidak ter-rotasi).
+ * Titik dari bangun berbeda yang berimpit (mis. dua bangun menyatu) digabung
+ * menjadi SATU huruf. Hasil ini dirender di lapisan terpisah agar huruf selalu
+ * tegak (tidak ikut rotasi objek).
+ */
+export function computeSceneLabels(scene: GeoScene, ppu = 24): SceneLabel[] {
+  type Raw = { id: string; sx: number; sy: number; ax: number; ay: number; anchor: string; letter?: string };
+  const raw: Raw[] = [];
+  for (const it of [...scene.items].sort((a, b) => (a.z ?? 0) - (b.z ?? 0))) {
+    const def = geometryShape(it.shapeId);
+    if (!def) continue;
+    const { sx, sy } = freeformMapping(def, it.params, ppu);
+    const infos = collectLabels(def, it.params, sx, sy);
+    const { w, h } = shapePixelSize(
+      { shapeId: it.shapeId, params: it.params, showVertices: it.showVertices, showSides: it.showSides, skipLabels: true },
+      ppu
+    );
+    const ap = resolveItemPos(scene, it);
+    const rot = ((it.rotation ?? 0) * Math.PI) / 180;
+    const sc = ap.scale;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    for (const info of infos) {
+      const lx = (info.px - w / 2) * sc;
+      const ly = (info.py - h / 2) * sc;
+      const rx = lx * cos - ly * sin;
+      const ry = lx * sin + ly * cos;
+      const sxS = ap.x + w / 2 + rx;
+      const syS = ap.y + h / 2 + ry;
+      const vx = info.ax - info.px;
+      const vy = info.ay - info.py;
+      const rxo = vx * cos - vy * sin;
+      const ryo = vx * sin + vy * cos;
+      raw.push({ id: it.id, sx: sxS, sy: syS, ax: sxS + rxo, ay: syS + ryo, anchor: info.anchor, letter: info.fixed });
+    }
+  }
+  // Gabungkan titik berimpit antar bangun berbeda → satu huruf.
+  const groups: { id: string; sx: number; sy: number; items: Raw[] }[] = [];
+  for (const r of raw) {
+    const g = groups.find((gr) => gr.id !== r.id && Math.hypot(gr.sx - r.sx, gr.sy - r.sy) < 8);
+    if (g) g.items.push(r);
+    else groups.push({ id: r.id, sx: r.sx, sy: r.sy, items: [r] });
+  }
+  let counter = 0;
+  return groups.map((g) => {
+    const fixed = g.items.find((i) => i.letter)?.letter;
+    const letter = fixed ?? sceneLabelAt(counter++);
+    const ax = g.items.reduce((s, i) => s + i.ax, 0) / g.items.length;
+    const ay = g.items.reduce((s, i) => s + i.ay, 0) / g.items.length;
+    return { x: ax, y: ay, letter, anchor: g.items[0].anchor };
+  });
+}
+
+export function renderScene(scene: GeoScene, pxPerUnit = 24): string {
+  const order = [...scene.items].sort((a, b) => (a.z ?? 0) - (b.z ?? 0));
+  const inner = order
+    .map((it) => {
+      const { x, y, scale } = resolveItemPos(scene, it);
+      const svg = renderShapeSvg(
+        { shapeId: it.shapeId, params: it.params, showVertices: it.showVertices, showSides: it.showSides, showEdgeLengths: it.showEdgeLengths, skipLabels: true },
+        pxPerUnit
+      );
+      const core = svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+      const rot = it.rotation ?? 0;
+      // Putar & skala terhadap PUSAT bangun (bukan pojok), agar sesuai pratinjau.
+      const { w, h } = shapePixelSize(
+        { shapeId: it.shapeId, params: it.params, showVertices: it.showVertices, showSides: it.showSides, skipLabels: true },
+        pxPerUnit
+      );
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      return `<g transform="translate(${fmt(cx)} ${fmt(cy)}) rotate(${fmt(rot)}) scale(${fmt(scale)}) translate(${fmt(-w / 2)} ${fmt(-h / 2)})">${core}</g>`;
+    })
+    .join('');
+  // Label dirender di lapisan terpisah (tidak ter-rotasi) dan digabung bila berimpit.
+  const labels = computeSceneLabels(scene, pxPerUnit)
+    .map((l) => `<text class="lbl" x="${fmt(l.x)}" y="${fmt(l.y)}" text-anchor="${l.anchor}">${l.letter}</text>`)
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${scene.width} ${scene.height}" width="${scene.width}" height="${scene.height}" role="img" aria-label="Bangun geometri">${GEOMETRY_STYLE}<g>${inner}</g><g class="labels">${labels}</g></svg>`;
+}
+
+export function sceneToDataUri(scene: GeoScene): string {
+  return geometryToDataUri(renderScene(scene));
+}
+
+/** Tambah bangun ke scene (dengan posisi berjenjang agar tak tumpang tindih persis). */
+export function addSceneItem(scene: GeoScene, shapeId: string, params: Record<string, number>, opts?: Partial<GeoSceneItem>): GeoScene {
+  const def = geometryShape(shapeId);
+  if (!def) return scene;
+  const it: GeoSceneItem = {
+    id: uid(),
+    shapeId,
+    params: resolvedParams(def, params ?? {}),
+    x: 40 + (scene.items.length % 6) * 30,
+    y: 40 + (scene.items.length % 6) * 24,
+    scale: 1,
+    rotation: 0,
+    showVertices: true,
+    showSides: false,
+    labelStart: 'A',
+    ...opts
+  };
+    return { ...scene, items: [...scene.items, it] };
+}
+
+/**
+ * Sesuaikan ukuran canvas dengan isi: pangkas layar kosong dan pastikan semua
+ * bangun muat. Geser semua item sejauh yang sama agar posisi relatif (termasuk
+ * hubungan parent) tetap terjaga.
+ */
+export function fitSceneToContent(scene: GeoScene, ppu = 24, doShift = true): GeoScene {
+  if (!scene.items.length) return { ...scene, width: 320, height: 240 };
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const it of scene.items) {
+    const ap = resolveItemPos(scene, it);
+    const { w, h } = shapePixelSize(
+      { shapeId: it.shapeId, params: it.params, showVertices: it.showVertices, showSides: it.showSides, skipLabels: true },
+      ppu
+    );
+    const hw = (w * ap.scale) / 2;
+    const hh = (h * ap.scale) / 2;
+    minX = Math.min(minX, ap.x - hw);
+    minY = Math.min(minY, ap.y - hh);
+    maxX = Math.max(maxX, ap.x + hw);
+    maxY = Math.max(maxY, ap.y + hh);
+  }
+  const margin = 24;
+  // Geser hanya bila diminta, atau bila isi keluar dari kiri/atas (tak bisa negatif).
+  const needShift = !doShift && (minX < 0 || minY < 0);
+  const shiftX = doShift || needShift ? margin - minX : 0;
+  const shiftY = doShift || needShift ? margin - minY : 0;
+  return {
+    ...scene,
+    width: Math.max(240, Math.ceil(maxX + shiftX + margin)),
+    height: Math.max(200, Math.ceil(maxY + shiftY + margin)),
+    items: scene.items.map((it) => ({ ...it, x: it.x + shiftX, y: it.y + shiftY }))
+  };
+}
+
+/**
+ * Ubah ukuran kanvas agar muat semua bangun, TANPA menggeser objek apa pun.
+ * Dipakai saat mengedit transform satu bangun (X/Y/skala/rotasi) agar bangun
+ * lainnya tidak ikut berpindah.
+ */
+export function resizeCanvasToContent(scene: GeoScene, ppu = 24): GeoScene {
+  if (!scene.items.length) return { ...scene, width: 320, height: 240 };
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const it of scene.items) {
+    const ap = resolveItemPos(scene, it);
+    const { w, h } = shapePixelSize(
+      { shapeId: it.shapeId, params: it.params, showVertices: it.showVertices, showSides: it.showSides, skipLabels: true },
+      ppu
+    );
+    maxX = Math.max(maxX, ap.x + (w * ap.scale) / 2);
+    maxY = Math.max(maxY, ap.y + (h * ap.scale) / 2);
+  }
+  const margin = 24;
+  return {
+    ...scene,
+    width: Math.max(240, Math.ceil(Math.max(maxX, 0) + margin)),
+    height: Math.max(200, Math.ceil(Math.max(maxY, 0) + margin))
+  };
+}
+

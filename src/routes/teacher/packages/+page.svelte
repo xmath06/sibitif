@@ -106,19 +106,39 @@
         .map((pq: any) => pq.question?.id)
         .filter(Boolean);
       manageSelected = Object.fromEntries(current.map((id: string) => [id, true]));
-      applyManageSubject(p.subjectId ?? subjects[0]?.id ?? '');
+      // Topik yang sudah punya soal terpilih → akan diaktifkan otomatis.
+      // (Edit paket tidak lagi mengaktifkan semua topik, hanya yang >0 soal.)
+      const selectedTopicIds: string[] = Array.from(
+        new Set(
+          (data?.packageQuestions ?? [])
+            .map((pq: any) => pq.question?.topic?.id as string | undefined)
+            .filter((id: string | undefined): id is string => Boolean(id))
+        )
+      );
+      applyManageSubject(p.subjectId ?? subjects[0]?.id ?? '', false, selectedTopicIds);
     } catch (e) {
       manageErr = e instanceof ApiError ? e.message : 'Gagal memuat paket';
     } finally {
       manageLoading = false;
     }
   }
-  function applyManageSubject(subjectId: string) {
+  function applyManageSubject(subjectId: string, resetSelection = false, initialTopicIds: string[] = []) {
+    // Ganti mapel → reset seleksi agar soal mapel lama tidak terbawa
+    // (menjaga paket tetap berisi soal dari satu mapel).
+    if (resetSelection && subjectId !== manageSubjectId) manageSelected = {};
     manageSubjectId = subjectId;
     manageTopics = subjects.find((s) => s.id === subjectId)?.topics ?? [];
     manageSelectedTopics = {};
     manageQuestionsByTopic = {};
-    if (manageTopics.length) toggleTopic(manageTopics[0].id);
+    // Aktifkan hanya topik yang punya soal terpilih (count > 0) agar
+    // edit paket tidak mencentang semua topik sekaligus. Bila belum ada
+    // satu pun terpilih (paket baru), aktifkan topik pertama sebagai awal.
+    const toActivate = initialTopicIds.length
+      ? initialTopicIds
+      : manageTopics[0]
+        ? [manageTopics[0].id]
+        : [];
+    for (const tid of toActivate) toggleTopic(tid);
   }
   async function toggleTopic(topicId: string) {
     if (manageSelectedTopics[topicId]) {
@@ -286,7 +306,7 @@
       {#if manageErr}<p class="mx-5 mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{manageErr}</p>{/if}
       <div class="grid gap-3 border-b border-border px-5 py-3">
         <label class="block"><span class="mb-1 block text-sm font-medium">Mapel</span>
-          <select bind:value={manageSubjectId} onchange={() => applyManageSubject(manageSubjectId)} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
+          <select bind:value={manageSubjectId} onchange={() => applyManageSubject(manageSubjectId, true)} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
             {#each subjects as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
           </select>
         </label>

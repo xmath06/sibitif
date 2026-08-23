@@ -57,8 +57,14 @@
     const se = myExam(s);
     if (se?.status === 'COMPLETED' || se?.status === 'WAITING_GRADING') return 'done';
     if (se?.status === 'IN_PROGRESS') return 'progress';
-    if (!s.isActive || s.scheduleStatus !== 'ON_GOING') return 'locked';
-    return 'ready';
+    // Jadwal otomatis "Siap" saat waktunya tiba (startTime <= now <= endTime),
+    // kecuali sedang dijeda (PAUSED) atau diakhiri (ENDED). ON_GOING = guru buka manual.
+    if (s.scheduleStatus === 'PAUSED' || s.scheduleStatus === 'ENDED') return 'locked';
+    const now = Date.now();
+    const startOk = s.startTime ? now >= new Date(s.startTime).getTime() : true;
+    const endOk = s.endTime ? now <= new Date(s.endTime).getTime() : true;
+    if (s.scheduleStatus === 'ON_GOING' || (s.scheduleStatus === 'SCHEDULED' && startOk && endOk)) return 'ready';
+    return 'locked';
   }
 </script>
 

@@ -11,12 +11,14 @@
   import TableCell from '@tiptap/extension-table-cell';
   import katex from 'katex';
   import 'mathlive';
-  import { ImageIcon, Loader2, Sigma, Bold, Italic, List, ListOrdered, Heading2, Table2, ChartLine, Box } from 'lucide-svelte';
+  import { ImageIcon, Loader2, Sigma, Bold, Italic, List, ListOrdered, Heading2, Table2, ChartLine, Box, Layers } from 'lucide-svelte';
   import { api } from '$api/client';
   import Button from '$components/ui/Button.svelte';
   import GraphDialog from '$components/GraphDialog.svelte';
   import GeometryDialog from '$components/GeometryDialog.svelte';
+  import GeometryCanvasDialog from '$components/GeometryCanvasDialog.svelte';
   import { cn } from '$lib/utils';
+  import { emptyScene, sceneToDataUri, type GeoScene } from '$lib/geometry';
 
   // Node LaTeX atom: disimpan sebagai <span class="math-latex" data-latex="…">
   // dan di-render menjadi persamaan (bukan script) baik di editor maupun saat ditampilkan.
@@ -101,7 +103,18 @@
     }
   });
 
-  // Node blok bangun geometri: disimpan sebagai <img data-geometry src="data:image/svg+xml;base64,…">
+  // Transform CSS dari zoom/offset agar dibakar ke dalam <img> (berlaku juga di
+  // tampilan siswa tanpa JS tambahan).
+  function geometryTransform(zoom: unknown, offset: unknown): string {
+    const z = Number(zoom) || 1;
+    const [ox, oy] = String(offset ?? '0,0')
+      .split(',')
+      .map((n) => Number(n) || 0);
+    return `transform: translate(${ox}px, ${oy}px) scale(${z}); transform-origin: center;`;
+  }
+
+  // Node blok bangun geometri: disimpan sebagai <img data-geometry src="data:image/svg+xml;…">
+  // dengan zoom & offset dibakar ke atribut style.
   const GeometryNode = Node.create({
     name: 'geometry',
     group: 'block',
@@ -116,9 +129,19 @@
           renderHTML: (attrs) => ({ src: attrs.src })
         },
         alt: {
-          default: '',
+          default: 'Bangun geometri',
           parseHTML: (el) => el.getAttribute('alt') || '',
           renderHTML: (attrs) => ({ alt: attrs.alt })
+        },
+        zoom: {
+          default: 1,
+          parseHTML: (el) => Number(el.getAttribute('data-zoom')) || 1,
+          renderHTML: (attrs) => ({ 'data-zoom': attrs.zoom })
+        },
+        offset: {
+          default: '0,0',
+          parseHTML: (el) => el.getAttribute('data-offset') || '0,0',
+          renderHTML: (attrs) => ({ 'data-offset': attrs.offset })
         }
       };
     },
@@ -126,15 +149,68 @@
       return [{ tag: 'img[data-geometry]' }];
     },
     renderHTML({ node }) {
-      return ['img', mergeAttributes({ 'data-geometry': '', class: 'math-graph' }, node.attrs)];
+      const style = geometryTransform(node.attrs.zoom, node.attrs.offset);
+      return ['img', mergeAttributes({ 'data-geometry': '', class: 'math-graph max-h-80 w-auto', style }, node.attrs)];
     },
     addNodeView() {
       return ({ node }) => {
         const img = document.createElement('img');
-        img.className = 'math-graph max-h-72 w-auto';
+        img.className = 'math-graph max-h-80 w-auto';
         img.setAttribute('data-geometry', '');
         img.src = node.attrs.src || '';
         img.alt = node.attrs.alt || 'Bangun geometri';
+        img.setAttribute('data-zoom', String(node.attrs.zoom ?? 1));
+        img.setAttribute('data-offset', String(node.attrs.offset ?? '0,0'));
+        img.setAttribute('style', geometryTransform(node.attrs.zoom, node.attrs.offset));
+        return { dom: img };
+      };
+    }
+  });
+
+  // Node blok canvas geometri interaktif: menyimpan scene JSON (+ preview statis).
+  // Di editor ditampilkan sebagai gambar pratinjau (src), siswa/ekspor melihat
+  // gambar yang sama. Edit melalui dialog (double-click pada gambar di editor).
+  const GeometryCanvasNode = Node.create({
+    name: 'geometryCanvas',
+    group: 'block',
+    atom: true,
+    selectable: true,
+    draggable: true,
+    addAttributes() {
+      return {
+        scene: {
+          default: '{}',
+          parseHTML: (el) => el.getAttribute('data-scene') || '{}',
+          renderHTML: (attrs) => ({ 'data-scene': attrs.scene })
+        },
+        src: {
+          default: '',
+          parseHTML: (el) => el.getAttribute('src') || '',
+          renderHTML: (attrs) => ({ src: attrs.src })
+        },
+        alt: {
+          default: 'Canvas geometri',
+          parseHTML: (el) => el.getAttribute('alt') || '',
+          renderHTML: (attrs) => ({ alt: attrs.alt })
+        }
+      };
+    },
+    parseHTML() {
+      return [{ tag: 'img[data-geometry-canvas]' }];
+    },
+    renderHTML({ node }) {
+      return ['img', mergeAttributes({ 'data-geometry-canvas': '', class: 'math-graph max-h-80 w-auto' }, node.attrs)];
+    },
+    addNodeView() {
+      return ({ node }) => {
+        const img = document.createElement('img');
+        img.className = 'math-graph max-h-80 w-auto';
+        img.setAttribute('data-geometry-canvas', '');
+        img.src = node.attrs.src || '';
+        img.alt = node.attrs.alt || 'Canvas geometri';
+        img.addEventListener('dblclick', () =>
+          img.dispatchEvent(new CustomEvent('geometry-canvas-edit', { bubbles: true, detail: { scene: node.attrs.scene } }))
+        );
         return { dom: img };
       };
     }
@@ -174,6 +250,8 @@
   let mathField = $state<any>(null);
   let graphOpen = $state(false);
   let geometryOpen = $state(false);
+  let canvasOpen = $state(false);
+  let editingScene = $state<GeoScene | undefined>(undefined);
   let tableActive = $state(false);
   let saveFlash = $state<'idle' | 'saving' | 'saved'>('idle');
   let wordCount = $state(0);
@@ -195,17 +273,30 @@
     }, 2500);
   }
 
-  function insertImageFromFile(file: File) {
+  function fileToDataUri(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function insertImageFromFile(file: File) {
     if (!file.type.startsWith('image/')) return;
     uploading = true;
-    api
-      .upload<{ success: boolean; data: { url: string } }>('/upload', file)
-      .then((res) => {
-        const url = (res as any).data?.url;
-        if (url && editor) editor.chain().focus().setImage({ src: url }).run();
-      })
-      .catch(() => alert('Gagal mengunggah gambar'))
-      .finally(() => (uploading = false));
+    try {
+      const res = await api.upload<{ success: boolean; data: { url: string } }>('/upload', file);
+      const url = (res as any)?.data?.url ?? (res as any)?.url;
+      if (url && editor) editor.chain().focus().setImage({ src: url }).run();
+      else throw new Error('no url');
+    } catch {
+      // Fallback lokal: embed sebagai data URI (S3 belum terkonfigurasi di dev).
+      const dataUri = await fileToDataUri(file);
+      if (editor) editor.chain().focus().setImage({ src: dataUri }).run();
+    } finally {
+      uploading = false;
+    }
   }
 
   function onPaste(e: ClipboardEvent) {
@@ -252,9 +343,47 @@
     editor.chain().focus().insertContent({ type: 'graph', attrs: { src, alt } }).run();
   }
 
-  function insertGeometry(src: string, alt: string) {
+  function insertGeometry(src: string, alt: string, zoom = 1, offset = '0,0') {
     if (!editor) return;
-    editor.chain().focus().insertContent({ type: 'geometry', attrs: { src, alt } }).run();
+    editor.chain().focus().insertContent({ type: 'geometry', attrs: { src, alt, zoom, offset } }).run();
+  }
+
+  // Sisipkan atau perbarui node canvas geometri di posisi seleksi saat ini.
+  function upsertGeometryCanvas(scene: GeoScene) {
+    if (!editor) return;
+    const src = sceneToDataUri(scene);
+    const json = JSON.stringify(scene);
+    const { state } = editor;
+    const { from } = state.selection;
+    let updated = false;
+    const tr = state.tr;
+    state.doc.nodesBetween(Math.max(0, from - 2), from + 2, (node, pos) => {
+      if (node.type.name === 'geometryCanvas') {
+        tr.setNodeMarkup(pos, undefined, { ...node.attrs, scene: json, src });
+        updated = true;
+        return false;
+      }
+    });
+    if (updated) editor.view.dispatch(tr);
+    else editor.chain().focus().insertContent({ type: 'geometryCanvas', attrs: { scene: json, src, alt: 'Canvas geometri' } }).run();
+  }
+
+  function openCanvasNew() {
+    editingScene = undefined;
+    canvasOpen = true;
+  }
+  function openCanvasEdit(sceneJson: string) {
+    try {
+      editingScene = JSON.parse(sceneJson) as GeoScene;
+    } catch {
+      editingScene = emptyScene();
+    }
+    canvasOpen = true;
+  }
+
+  function onCanvasEdit(e: Event) {
+    const detail = (e as CustomEvent<{ scene: string }>).detail;
+    if (detail?.scene) openCanvasEdit(detail.scene);
   }
 
   onMount(() => {
@@ -272,7 +401,8 @@
         TableCell,
         MathNode,
         GraphNode,
-        GeometryNode
+        GeometryNode,
+        GeometryCanvasNode
       ],
       content: value,
       onUpdate: ({ editor }) => {
@@ -285,11 +415,13 @@
     });
     el.addEventListener('paste', onPaste);
     el.addEventListener('drop', onDrop);
+    el.addEventListener('geometry-canvas-edit', onCanvasEdit);
   });
 
   onDestroy(() => {
     el?.removeEventListener('paste', onPaste);
     el?.removeEventListener('drop', onDrop);
+    el?.removeEventListener('geometry-canvas-edit', onCanvasEdit);
     editor?.destroy();
   });
 
@@ -340,6 +472,9 @@
       </Button>
       <Button variant="ghost" size="icon" onclick={() => (geometryOpen = true)} title="Sisipkan bangun geometri 2D/3D">
         <Box class="h-4 w-4" />
+      </Button>
+      <Button variant="ghost" size="icon" onclick={() => openCanvasNew()} title="Canvas bangun geometri (drag & drop, objek di dalam objek)">
+        <Layers class="h-4 w-4" />
       </Button>
       {/if}
       {#if !compact}
@@ -394,4 +529,5 @@
 
   <GraphDialog open={graphOpen} onClose={() => (graphOpen = false)} onInsert={insertGraph} />
   <GeometryDialog open={geometryOpen} onClose={() => (geometryOpen = false)} onInsert={insertGeometry} />
+  <GeometryCanvasDialog open={canvasOpen} scene={editingScene} onClose={() => (canvasOpen = false)} onSave={upsertGeometryCanvas} />
 </div>

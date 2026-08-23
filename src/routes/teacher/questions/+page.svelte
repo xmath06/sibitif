@@ -16,9 +16,9 @@
   interface Topic { id: string; name: string; subjectId: string }
   interface Subject { id: string; name: string; topics: Topic[] }
   interface Opt { id?: string; optionText: string; scoreWeight?: string }
-  interface Question { id: string; questionText: string; questionType: QuestionType; minWordCount?: number | null; maxWordCount?: number | null; options: Opt[] }
+  interface Question { id: string; questionText: string; questionType: QuestionType; minWordCount?: number | null; maxWordCount?: number | null; answerKey?: string | null; options: Opt[] }
 
-  const TYPES: QuestionType[] = ['MCQ', 'ESSAY', 'TRUE_FALSE', 'POLY_CHOICE', 'MULTI_SELECT'];
+  const TYPES: QuestionType[] = ['MCQ', 'ESSAY', 'TRUE_FALSE', 'POLY_CHOICE', 'MULTI_SELECT', 'URAIAN_PENDEK'];
 
   function isBenar(o: Opt) { return Number(o.scoreWeight ?? 0) > 0; }
   function kunciOf(q: Question) {
@@ -41,7 +41,7 @@
 
   let show = $state(false);
   let editing = $state<Question | null>(null);
-  let f = $state({ questionText: '', questionType: 'MCQ' as QuestionType, minWordCount: '', maxWordCount: '', options: [{ optionText: '' }] as Opt[] });
+  let f = $state({ questionText: '', questionType: 'MCQ' as QuestionType, minWordCount: '', maxWordCount: '', answerKey: '', options: [{ optionText: '' }] as Opt[] });
   let saving = $state(false);
   let formErr = $state('');
 
@@ -63,18 +63,18 @@
 
   function openCreate() {
     editing = null;
-    f = { questionText: '', questionType: 'MCQ', minWordCount: '', maxWordCount: '', options: [{ optionText: '', scoreWeight: '0' }] };
+    f = { questionText: '', questionType: 'MCQ', minWordCount: '', maxWordCount: '', answerKey: '', options: [{ optionText: '', scoreWeight: '0' }] };
     formErr = ''; show = true;
   }
   function openEdit(q: Question) {
     editing = q;
-    f = { questionText: q.questionText, questionType: q.questionType, minWordCount: String(q.minWordCount ?? ''), maxWordCount: String(q.maxWordCount ?? ''), options: q.options.length ? q.options.map((o) => ({ id: o.id, optionText: o.optionText, scoreWeight: String(o.scoreWeight ?? '0') })) : [{ optionText: '', scoreWeight: '0' }] };
+    f = { questionText: q.questionText, questionType: q.questionType, minWordCount: String(q.minWordCount ?? ''), maxWordCount: String(q.maxWordCount ?? ''), answerKey: q.answerKey ?? '', options: q.options.length ? q.options.map((o) => ({ id: o.id, optionText: o.optionText, scoreWeight: String(o.scoreWeight ?? '0') })) : [{ optionText: '', scoreWeight: '0' }] };
     formErr = ''; show = true;
   }
   function addOpt() { f.options = [...f.options, { optionText: '', scoreWeight: '0' }]; }
   function delOpt(i: number) { f.options = f.options.filter((_, idx) => idx !== i); }
   function onTypeChange() {
-    if (f.questionType === 'ESSAY') f.options = [];
+    if (f.questionType === 'ESSAY' || f.questionType === 'URAIAN_PENDEK') f.options = [];
     else if (f.options.length === 0) f.options = [{ optionText: '' }];
   }
   async function save() {
@@ -92,7 +92,8 @@
     };
     if (f.minWordCount !== '') body.minWordCount = Number(f.minWordCount);
     if (f.maxWordCount !== '') body.maxWordCount = Number(f.maxWordCount);
-    if (f.questionType !== 'ESSAY') body.options = f.options.filter((o) => !isBlankHtml(o.optionText)).map((o) => ({ optionText: o.optionText, scoreWeight: Number(o.scoreWeight ?? 0) }));
+    if (f.questionType !== 'ESSAY' && f.questionType !== 'URAIAN_PENDEK') body.options = f.options.filter((o) => !isBlankHtml(o.optionText)).map((o) => ({ optionText: o.optionText, scoreWeight: Number(o.scoreWeight ?? 0) }));
+    if (f.questionType === 'URAIAN_PENDEK') body.answerKey = f.answerKey || null;
     try {
       if (editing) await api.put(`/questions/${editing.id}`, body);
       else await api.post('/questions', body);
@@ -164,6 +165,9 @@
               </p>
             {/if}
           </div>
+          {#if q.questionType === 'URAIAN_PENDEK' && q.answerKey}
+            <p class="mt-1 text-xs text-muted-foreground">Kunci: {q.answerKey}</p>
+          {/if}
           <div class="flex shrink-0 gap-1">
             <Button variant="ghost" size="icon" onclick={() => openEdit(q)} title="Edit"><Pencil class="h-4 w-4" /></Button>
             <Button variant="ghost" size="icon" onclick={() => del(q)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
@@ -198,6 +202,11 @@
             <label class="block"><span class="mb-1 block text-sm font-medium">Min kata</span><input bind:value={f.minWordCount} type="number" class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring" /></label>
             <label class="block"><span class="mb-1 block text-sm font-medium">Max kata</span><input bind:value={f.maxWordCount} type="number" class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring" /></label>
           </div>
+        {:else if f.questionType === 'URAIAN_PENDEK'}
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium">Kunci Jawaban</span>
+            <textarea bind:value={f.answerKey} rows="3" placeholder="Kunci jawaban (rujukan guru saat menilai)…" class="w-full rounded-lg border border-border bg-card p-3 text-sm outline-none focus:ring-2 focus:ring-ring"></textarea>
+          </label>
         {:else}
           <div>
             <div class="mb-1 flex items-center justify-between"><span class="text-sm font-medium">Opsi Jawaban</span><Button variant="outline" size="sm" onclick={addOpt}><Plus class="h-3.5 w-3.5" /> Opsi</Button></div>

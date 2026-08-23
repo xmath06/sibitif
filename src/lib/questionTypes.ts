@@ -5,7 +5,8 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   ESSAY: 'Esai',
   TRUE_FALSE: 'Benar Salah',
   POLY_CHOICE: 'Pilihan Ganda Berbobot',
-  MULTI_SELECT: 'Pilihan Ganda (Banyak Jawaban)'
+  MULTI_SELECT: 'Pilihan Ganda (Banyak Jawaban)',
+  URAIAN_PENDEK: 'Uraian Pendek'
 };
 
 export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
@@ -13,5 +14,6 @@ export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
   ESSAY: 'Jawaban bebas; dinilai guru secara manual.',
   TRUE_FALSE: 'Dua pilihan Benar/Salah; tandai satu kunci.',
   POLY_CHOICE: 'Pilih satu jawaban; tiap opsi punya bobot (cocok untuk skala/tes psikologi).',
-  MULTI_SELECT: 'Boleh memilih lebih dari satu jawaban; nilai = jumlah bobot yang dipilih.'
+  MULTI_SELECT: 'Boleh memilih lebih dari satu jawaban; nilai = jumlah bobot yang dipilih.',
+  URAIAN_PENDEK: 'Jawaban singkat; ada kunci jawaban sebagai rujukan guru (dinilai manual).'
 };

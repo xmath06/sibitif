@@ -48,7 +48,7 @@
     return exam.questions.map((q, i) => {
       const a = answers[q.id];
       const answered =
-        q.questionType === 'ESSAY'
+        q.questionType === 'ESSAY' || q.questionType === 'URAIAN_PENDEK'
           ? Boolean(a?.essayAnswer && a.essayAnswer.replace(/<[^>]*>/g, '').trim().length > 0)
           : q.questionType === 'MULTI_SELECT'
             ? (a?.selectedOptionIds.length ?? 0) > 0
@@ -123,7 +123,7 @@
           questionId: q.id,
           selectedOptionId: q.questionType === 'MULTI_SELECT' ? undefined : a.selectedOptionId,
           selectedOptionIds: q.questionType === 'MULTI_SELECT' ? a.selectedOptionIds : undefined,
-          essayAnswer: q.questionType === 'ESSAY' ? a.essayAnswer : undefined,
+          essayAnswer: q.questionType === 'ESSAY' || q.questionType === 'URAIAN_PENDEK' ? a.essayAnswer : undefined,
           isFlagged: a.isFlagged
         };
       })
@@ -152,7 +152,7 @@
     exam.questions.forEach((q, i) => {
       const a = answers[q.id];
       const label = `Soal ${i + 1}`;
-      if (q.questionType === 'ESSAY') {
+      if (q.questionType === 'ESSAY' || q.questionType === 'URAIAN_PENDEK') {
         const words = countWords(a?.essayAnswer);
         if (words === 0) {
           unanswered++;
@@ -325,13 +325,13 @@
               <Html html={currentQuestion.questionText} />
             </div>
 
-            {#if currentQuestion.questionType === 'ESSAY'}
+            {#if currentQuestion.questionType === 'ESSAY' || currentQuestion.questionType === 'URAIAN_PENDEK'}
               <div class="mt-4">
                 {#key currentQuestion.id}
                   <RichTextEditor
                     value={a.essayAnswer}
                     onChange={(h) => setEssay(currentQuestion, h)}
-                    placeholder="Tulis esai Anda… (rumus, tabel & gambar didukung)"
+                    placeholder={currentQuestion.questionType === 'URAIAN_PENDEK' ? 'Tulis jawaban singkat Anda…' : 'Tulis esai Anda… (rumus, tabel & gambar didukung)'}
                     minWordCount={currentQuestion.minWordCount ?? null}
                     maxWordCount={currentQuestion.maxWordCount ?? null}
                     showFlash={false}
