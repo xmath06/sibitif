@@ -223,44 +223,39 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): {
     }
     case 'cylinder': {
       const r = p.r, h = p.h;
-      // lingkaran alas & atas → poligon aproksimasi (elips isometrik)
+      // lingkaran alas & atas (proyeksi kabinet lewat iso, koordinat unit
+      // — konsisten dengan bangun 3D lainnya; tanpa offset 200/*40 agar
+      // ukuran tabung sepadan di mode freeform/kanvas).
       const N = 32;
       const bot: Pt[] = [];
       const top: Pt[] = [];
       for (let i = 0; i <= N; i++) {
         const a = (i / N) * TAU;
-        const v = { x: r * Math.cos(a), y: r * Math.sin(a), z: 0 };
-        bot.push({x: 200 + (v.x - v.y * Math.cos(Math.PI / 2) * 0.5) * 40,
-        y: 200 - (v.z + v.y * Math.sin(Math.PI / 2) * 0.5) * 40});
-        const v2 = { x: r * Math.cos(a), y: r * Math.sin(a), z: h };
-        top.push({x: 200 + (v2.x - v2.y * Math.cos(Math.PI / 2) * 0.5) * 40,
-        y: 200 - (v2.z + v2.y * Math.sin(Math.PI / 2) * 0.5) * 40});
+        const bx = r * Math.cos(a), by = r * Math.sin(a);
+        bot.push(iso({ x: bx, y: by, z: 0 }));
+        top.push(iso({ x: bx, y: by, z: h }));
       }
-      // 2. Garis tegak sisi kiri dan kanan (langsung di-push ke `lines` 2D)
-      const leftBot2D  = { x: 200 + (-r) * 40, y: 200 };
-      const leftTop2D  = { x: 200 + (-r) * 40, y: 200 - h * 40 };
-      const rightBot2D = { x: 200 + r * 40,    y: 200 };
-      const rightTop2D = { x: 200 + r * 40,    y: 200 - h * 40 };
-
-      lines.push({ a: leftBot2D,  b: leftTop2D,  dashed: false });
-      lines.push({ a: rightBot2D, b: rightTop2D, dashed: false });
-      // elips sebagai polyline
+      // garis tegak sisi kiri & kanan
+      seg({ x: -r, y: 0, z: 0 }, { x: -r, y: 0, z: h });
+      seg({ x: r, y: 0, z: 0 }, { x: r, y: 0, z: h });
       pts.push(...bot, ...top);
+      // busur alas: depan solid, belakang (y>0) putus-putus
       lines.push(...bot.slice(0, N).map((p2, i) => ({
         a: p2,
         b: bot[i + 1],
         dashed: Math.sin(((i + 0.5) / N) * TAU) > 0
       })));
+      // busur atas: selalu solid
       lines.push(...top.slice(0, N).map((p2, i) => ({
         a: p2,
         b: top[i + 1],
         dashed: false
       })));
-      // dimensi: jari-jari alas & tinggi (koordinat proyeksi sama)
-      dimLines.push({ a: { x: 200, y: 200 }, b: { x: 200 + r * 40, y: 200 }, value: r });
-      dimLines.push({ a: { x: 200, y: 200 }, b: { x: 200, y: 200 - h * 40 }, value: h });
+      // dimensi: jari-jari alas & tinggi
+      mark({ x: 0, y: 0, z: 0 }, { x: r, y: 0, z: 0 });
+      mark({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: h });
       // rusuk: jari-jari alas (bisa diberi label panjang)
-      edgeLines.push({ a: { x: 200, y: 200 }, b: { x: 200 + r * 40, y: 200 }, value: r });
+      edgeLines.push({ a: iso({ x: 0, y: 0, z: 0 }), b: iso({ x: r, y: 0, z: 0 }), value: r });
       break;
     }
     case 'cone': {
@@ -269,28 +264,26 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): {
       const bot: Pt[] = [];
       for (let i = 0; i <= N; i++) {
         const a = (i / N) * TAU;
-        const v = { x: r * Math.cos(a), y: r * Math.sin(a), z: 0 };
-        bot.push({ x: 200 + v.x * 40, y: 200 - (v.z + v.y * 0.5) * 40 });
+        const bx = r * Math.cos(a), by = r * Math.sin(a);
+        bot.push(iso({ x: bx, y: by, z: 0 }));
       }
       // puncak tepat di atas pusat alas
-      const apex = { x: 200, y: 200 - h * 40 };
-      pts.push(apex, ...bot);
+      const apex = { x: 0, y: 0, z: h };
+      pts.push(iso(apex), ...bot);
       // dua garis pelukis (siluet) dari puncak ke ujung kiri/kanan alas
-      const leftBot2D = { x: 200 - r * 40, y: 200 };
-      const rightBot2D = { x: 200 + r * 40, y: 200 };
-      lines.push({ a: apex, b: leftBot2D });
-      lines.push({ a: apex, b: rightBot2D });
+      seg(apex, { x: -r, y: 0, z: 0 });
+      seg(apex, { x: r, y: 0, z: 0 });
       // busur alas: depan (sin a < 0) solid, belakang (sin a > 0) putus-putus
       lines.push(...bot.slice(0, N).map((p2, i) => ({
         a: p2,
         b: bot[i + 1],
         dashed: Math.sin(((i + 0.5) / N) * TAU) > 0
       })));
-      // dimensi: jari-jari alas & tinggi (koordinat proyeksi sama)
-      dimLines.push({ a: { x: 200, y: 200 }, b: { x: 200 + r * 40, y: 200 }, value: r });
-      dimLines.push({ a: { x: 200, y: 200 }, b: apex, value: h });
+      // dimensi: jari-jari alas & tinggi
+      mark({ x: 0, y: 0, z: 0 }, { x: r, y: 0, z: 0 });
+      mark({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: h });
       // rusuk: jari-jari alas (bisa diberi label panjang)
-      edgeLines.push({ a: { x: 200, y: 200 }, b: { x: 200 + r * 40, y: 200 }, value: r });
+      edgeLines.push({ a: iso({ x: 0, y: 0, z: 0 }), b: iso({ x: r, y: 0, z: 0 }), value: r });
       break;
     }
     case 'sphere': {
