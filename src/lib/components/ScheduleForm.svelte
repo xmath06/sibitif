@@ -5,7 +5,7 @@
   import Button from '$components/ui/Button.svelte';
   import Card from '$components/ui/Card.svelte';
   import Badge from '$components/ui/Badge.svelte';
-  import { Loader2, Check } from 'lucide-svelte';
+  import { Loader2, Check, ChevronDown, ChevronRight } from 'lucide-svelte';
   import { cn } from '$lib/utils';
 
   let {
@@ -49,6 +49,8 @@
   // tetap nyaman meski siswa sangat banyak (tidak perlu ubah backend:
   // studentIds tetap array ID terpilih yang datar).
   let studentSearch = $state('');
+  // Pengelompokan per kelas (collapse): tiap kelas bisa dikembangkan sendiri.
+  let expanded = $state<Record<string, boolean>>({});
   const studentGroups = $derived.by(() => {
     const q = studentSearch.trim().toLowerCase();
     const filtered = students.filter((s) => !q || (s.name ?? '').toLowerCase().includes(q));
@@ -71,6 +73,11 @@
     } else {
       studentIds = [...new Set([...studentIds, ...ids])];
     }
+  }
+  function setAllExpanded(v: boolean) {
+    const next: Record<string, boolean> = {};
+    for (const g of studentGroups) next[g.name] = v;
+    expanded = next;
   }
 
   const gradeLevels = $derived([...new Set(classes.map((c) => c.gradeLevel))].sort());
@@ -294,36 +301,53 @@
 
     {#if targetType === 'SPECIFIC_STUDENTS'}
       <div class="rounded-xl border border-border p-3">
-        <p class="mb-2 text-sm font-medium">Pilih Siswa (Remedial/Susulan)</p>
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <p class="text-sm font-medium">Pilih Siswa (Remedial/Susulan)</p>
+          {#if studentGroups.length > 0}
+            <div class="flex items-center gap-2 text-xs">
+              <button type="button" class="text-primary hover:underline" onclick={() => setAllExpanded(true)}>Buka semua</button>
+              <span class="text-muted-foreground">·</span>
+              <button type="button" class="text-primary hover:underline" onclick={() => setAllExpanded(false)}>Tutup semua</button>
+            </div>
+          {/if}
+        </div>
         <input
           bind:value={studentSearch}
           placeholder="Cari nama siswa…"
           class="mb-3 h-9 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
         />
-        <div class="max-h-64 space-y-3 overflow-y-auto pr-1">
+        <div class="max-h-72 space-y-2 overflow-y-auto pr-1">
           {#if studentGroups.length === 0}
             <p class="text-sm text-muted-foreground">{students.length === 0 ? 'Tidak ada data siswa.' : 'Tidak ada siswa cocok pencarian.'}</p>
           {/if}
           {#each studentGroups as grp}
             {@const grpIds = grp.students.map((s) => s.id)}
             {@const allSel = grpIds.length > 0 && grpIds.every((id) => studentIds.includes(id))}
-            <div>
-              <div class="mb-1.5 flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onclick={() => toggleClass(grpIds, allSel)}
-                  class={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium', allSel ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card')}
-                >
-                  {#if allSel}<Check class="h-3.5 w-3.5" />{/if}
-                  {grp.name} <span class="opacity-70">({grp.students.length})</span>
+            {@const isOpen = expanded[grp.name] ?? false}
+            <div class="rounded-lg border border-border">
+              <div class="flex items-center justify-between gap-2 px-2 py-1.5">
+                <button type="button" onclick={() => (expanded[grp.name] = !isOpen)} class="inline-flex items-center gap-1.5 text-sm font-medium">
+                  {#if isOpen}<ChevronDown class="h-4 w-4" />{:else}<ChevronRight class="h-4 w-4" />{/if}
+                  {grp.name} <span class="opacity-60">({grp.students.length})</span>
                 </button>
-                <span class="text-xs text-muted-foreground">{grp.students.filter((s) => studentIds.includes(s.id)).length} dipilih</span>
+                <div class="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onclick={() => toggleClass(grpIds, allSel)}
+                    class={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium', allSel ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card')}
+                  >
+                    {#if allSel}<Check class="h-3.5 w-3.5" />{/if} Pilih semua
+                  </button>
+                  <span class="text-xs text-muted-foreground">{grp.students.filter((s) => studentIds.includes(s.id)).length} dipilih</span>
+                </div>
               </div>
-              <div class="flex flex-wrap gap-2 pl-1">
-                {#each grp.students as s}
-                  <button type="button" onclick={() => (studentIds = toggle(studentIds, s.id))} class={cn('rounded-full border px-3 py-1 text-sm', studentIds.includes(s.id) ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card')}>{s.name}</button>
-                {/each}
-              </div>
+              {#if isOpen}
+                <div class="flex flex-wrap gap-2 px-2 pb-2 pl-7">
+                  {#each grp.students as s}
+                    <button type="button" onclick={() => (studentIds = toggle(studentIds, s.id))} class={cn('rounded-full border px-3 py-1 text-sm', studentIds.includes(s.id) ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card')}>{s.name}</button>
+                  {/each}
+                </div>
+              {/if}
             </div>
           {/each}
         </div>
