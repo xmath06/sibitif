@@ -8,12 +8,23 @@
   import { Loader2, Check } from 'lucide-svelte';
   import { cn } from '$lib/utils';
 
-  let { id, initial, classes = [], students = [] }: {
+  let {
+    id,
+    initial,
+    classes: initialClasses = [],
+    students: initialStudents = []
+  }: {
     id?: string;
     initial?: any;
     classes?: { id: string; name: string; gradeLevel: number }[];
     students?: { id: string; name: string; className?: string }[];
   } = $props();
+
+  // Diisi dari API di onMount (prop hanya default kosong). Pakai $state agar
+  // pembaruan hasil fetch mereaktifkan template (targeting kelas & siswa).
+  // (Mendestruktur prop lalu meng-assign ulang tidak reaktif di Svelte 5.)
+  let classes = $state<{ id: string; name: string; gradeLevel: number }[]>(initialClasses);
+  let students = $state<{ id: string; name: string; className?: string }[]>(initialStudents);
 
   let packages = $state<{ id: string; title: string; subject?: { religion?: string | null } }[]>([]);
   let loading = $state(false);
@@ -33,6 +44,34 @@
   let targetClassIds = $state<string[]>([]);
   let targetGradeLevels = $state<number[]>([]);
   let studentIds = $state<string[]>([]);
+
+  // Pencarian & pengelompokan siswa per kelas agar pemilihan SPECIFIC_STUDENTS
+  // tetap nyaman meski siswa sangat banyak (tidak perlu ubah backend:
+  // studentIds tetap array ID terpilih yang datar).
+  let studentSearch = $state('');
+  const studentGroups = $derived.by(() => {
+    const q = studentSearch.trim().toLowerCase();
+    const filtered = students.filter((s) => !q || (s.name ?? '').toLowerCase().includes(q));
+    const map = new Map<string, { id: string; name: string; className?: string }[]>();
+    for (const s of filtered) {
+      const key = s.className || 'Tanpa Kelas';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(s);
+    }
+    return [...map.entries()]
+      .map(([name, list]) => ({ name, students: list }))
+      .sort((a, b) =>
+        a.name === 'Tanpa Kelas' ? 1 : b.name === 'Tanpa Kelas' ? -1 : a.name.localeCompare(b.name)
+      );
+  });
+  function toggleClass(ids: string[], allSel: boolean) {
+    if (allSel) {
+      const drop = new Set(ids);
+      studentIds = studentIds.filter((id) => !drop.has(id));
+    } else {
+      studentIds = [...new Set([...studentIds, ...ids])];
+    }
+  }
 
   const gradeLevels = $derived([...new Set(classes.map((c) => c.gradeLevel))].sort());
 
@@ -89,8 +128,15 @@
         api.get('/teacher/students', { limit: 10000 }),
       ]);
       packages = ((pres as any).data ?? []).map((p: any) => ({ id: p.id, title: p.title, subject: p.subject }));
-      classes = (cres as any).data ?? cres ?? [];
-      students = ((sres as any).data ?? []).map((u: any) => ({ id: u.id, name: u.name, className: u.className }));
+      const clsList = (((cres as any).data ?? cres) ?? []) as { id: string; name: string; gradeLevel: number }[];
+      classes = clsList;
+      const classMap = new Map(clsList.map((c) => [c.id, c.name]));
+      const stuRaw = (((sres as any).data ?? sres) ?? []) as { id: string; name: string; classId?: string | null }[];
+      students = stuRaw.map((u) => ({
+        id: u.id,
+        name: u.name,
+        className: u.classId ? classMap.get(u.classId) ?? undefined : undefined
+      }));
     } catch (e) {
       errorMsg = e instanceof ApiError ? e.message : 'Gagal memuat paket';
     }
@@ -249,9 +295,36 @@
     {#if targetType === 'SPECIFIC_STUDENTS'}
       <div class="rounded-xl border border-border p-3">
         <p class="mb-2 text-sm font-medium">Pilih Siswa (Remedial/Susulan)</p>
-        <div class="flex max-h-48 flex-wrap gap-2 overflow-y-auto">
-          {#each students as s}
-            <button type="button" onclick={() => (studentIds = toggle(studentIds, s.id))} class={cn('rounded-full border px-3 py-1 text-sm', studentIds.includes(s.id) ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card')}>{s.name}{s.className ? ` · ${s.className}` : ''}</button>
+        <input
+          bind:value={studentSearch}
+          placeholder="Cari nama siswa…"
+          class="mb-3 h-9 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
+        <div class="max-h-64 space-y-3 overflow-y-auto pr-1">
+          {#if studentGroups.length === 0}
+            <p class="text-sm text-muted-foreground">{students.length === 0 ? 'Tidak ada data siswa.' : 'Tidak ada siswa cocok pencarian.'}</p>
+          {/if}
+          {#each studentGroups as grp}
+            {@const grpIds = grp.students.map((s) => s.id)}
+            {@const allSel = grpIds.length > 0 && grpIds.every((id) => studentIds.includes(id))}
+            <div>
+              <div class="mb-1.5 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onclick={() => toggleClass(grpIds, allSel)}
+                  class={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium', allSel ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card')}
+                >
+                  {#if allSel}<Check class="h-3.5 w-3.5" />{/if}
+                  {grp.name} <span class="opacity-70">({grp.students.length})</span>
+                </button>
+                <span class="text-xs text-muted-foreground">{grp.students.filter((s) => studentIds.includes(s.id)).length} dipilih</span>
+              </div>
+              <div class="flex flex-wrap gap-2 pl-1">
+                {#each grp.students as s}
+                  <button type="button" onclick={() => (studentIds = toggle(studentIds, s.id))} class={cn('rounded-full border px-3 py-1 text-sm', studentIds.includes(s.id) ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card')}>{s.name}</button>
+                {/each}
+              </div>
+            </div>
           {/each}
         </div>
       </div>

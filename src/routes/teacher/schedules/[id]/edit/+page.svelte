@@ -28,5 +28,5 @@
 {:else if error}
   <p class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
 {:else if initial}
-  <ScheduleForm id={$page.params.id} initial={initial} classes={[]} students={[]} />
+  <ScheduleForm id={$page.params.id} initial={initial} />
 {/if}
