@@ -316,8 +316,8 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): {
       const tri2 = tri.map((v) => ({ x: v.x, y: v.y + dep, z: v.z }));
       [...tri, ...tri2].forEach((v) => pts.push(iso(v)));
       seg(tri[0], tri[1]); seg(tri[1], tri[2]); seg(tri[2], tri[0]);
-      seg(tri2[0], tri2[1], true); seg(tri2[1], tri2[2], true); seg(tri2[2], tri2[0], true);
-      seg(tri[0], tri2[0]); seg(tri[1], tri2[1], true); seg(tri[2], tri2[2]);
+      seg(tri2[0], tri2[1], true); seg(tri2[1], tri2[2]); seg(tri2[2], tri2[0], true);
+      seg(tri[0], tri2[0], true); seg(tri[1], tri2[1]); seg(tri[2], tri2[2]);
       mark(tri[0], tri[1]);
       mark(tri[0], tri2[0]);
       mark(tri[1], tri[2]);
@@ -334,8 +334,8 @@ function build3D(def: GeometryShapeDef, p: Record<string, number>): {
       ];
       const apex = { x: 0, y: 0, z: ht };
       [...base4, apex].forEach((v) => pts.push(iso(v)));
-      seg(base4[0], base4[1]); seg(base4[1], base4[2]); seg(base4[2], base4[3], true); seg(base4[3], base4[0]);
-      seg(base4[0], apex); seg(base4[1], apex); seg(base4[2], apex, true); seg(base4[3], apex);
+      seg(base4[0], base4[1]); seg(base4[1], base4[2]); seg(base4[2], base4[3], true); seg(base4[3], base4[0], true);
+      seg(base4[0], apex); seg(base4[1], apex); seg(base4[2], apex); seg(base4[3], apex, true);
       mark(base4[0], base4[1]);
       mark(base4[1], base4[2]);
       mark({ x: 0, y: 0, z: 0 }, apex);
@@ -702,6 +702,8 @@ export interface GeoSceneItem {
   showEdgeLengths?: boolean;
   labelStart?: string;
   z?: number; // urutan tumpuk (kecil = belakang)
+  // Untuk shapeId === 'line': kedua ujung garis dalam koordinat scene (px).
+  endpoints?: { x: number; y: number }[];
 }
 
 export interface GeoScene {
@@ -864,6 +866,10 @@ export function renderScene(scene: GeoScene, pxPerUnit = 24): string {
   const order = [...scene.items].sort((a, b) => (a.z ?? 0) - (b.z ?? 0));
   const inner = order
     .map((it) => {
+      if (it.shapeId === 'line' && it.endpoints && it.endpoints.length === 2) {
+        const [a, b] = it.endpoints;
+        return `<g><line class="edge" x1="${fmt(a.x)}" y1="${fmt(a.y)}" x2="${fmt(b.x)}" y2="${fmt(b.y)}"/></g>`;
+      }
       const { x, y, scale } = resolveItemPos(scene, it);
       const svg = renderShapeSvg(
         { shapeId: it.shapeId, params: it.params, showVertices: it.showVertices, showSides: it.showSides, showEdgeLengths: it.showEdgeLengths, skipLabels: true },
@@ -894,6 +900,29 @@ export function sceneToDataUri(scene: GeoScene): string {
 
 /** Tambah bangun ke scene (dengan posisi berjenjang agar tak tumpang tindih persis). */
 export function addSceneItem(scene: GeoScene, shapeId: string, params: Record<string, number>, opts?: Partial<GeoSceneItem>): GeoScene {
+  // Garis bebas: dua ujung bisa di-drag (tidak pakai param/box model).
+  if (shapeId === 'line') {
+    const cx = scene.width / 2;
+    const cy = scene.height / 2;
+    const it: GeoSceneItem = {
+      id: uid(),
+      shapeId: 'line',
+      params: {},
+      endpoints: [
+        { x: cx - 70, y: cy },
+        { x: cx + 70, y: cy }
+      ],
+      x: cx - 70,
+      y: cy,
+      scale: 1,
+      rotation: 0,
+      showVertices: false,
+      showSides: false,
+      labelStart: 'A',
+      ...opts
+    };
+    return { ...scene, items: [...scene.items, it] };
+  }
   const def = geometryShape(shapeId);
   if (!def) return scene;
   const it: GeoSceneItem = {
@@ -924,6 +953,14 @@ export function fitSceneToContent(scene: GeoScene, ppu = 24, doShift = true): Ge
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (const it of scene.items) {
+    if (it.shapeId === 'line' && it.endpoints && it.endpoints.length === 2) {
+      const [a, b] = it.endpoints;
+      minX = Math.min(minX, a.x, b.x);
+      minY = Math.min(minY, a.y, b.y);
+      maxX = Math.max(maxX, a.x, b.x);
+      maxY = Math.max(maxY, a.y, b.y);
+      continue;
+    }
     const ap = resolveItemPos(scene, it);
     const { w, h } = shapePixelSize(
       { shapeId: it.shapeId, params: it.params, showVertices: it.showVertices, showSides: it.showSides, skipLabels: true },
@@ -945,7 +982,12 @@ export function fitSceneToContent(scene: GeoScene, ppu = 24, doShift = true): Ge
     ...scene,
     width: Math.max(240, Math.ceil(maxX + shiftX + margin)),
     height: Math.max(200, Math.ceil(maxY + shiftY + margin)),
-    items: scene.items.map((it) => ({ ...it, x: it.x + shiftX, y: it.y + shiftY }))
+    items: scene.items.map((it) => {
+      if (it.shapeId === 'line' && it.endpoints && it.endpoints.length === 2) {
+        return { ...it, endpoints: it.endpoints.map((p) => ({ x: p.x + shiftX, y: p.y + shiftY })) };
+      }
+      return { ...it, x: it.x + shiftX, y: it.y + shiftY };
+    })
   };
 }
 
@@ -959,6 +1001,12 @@ export function resizeCanvasToContent(scene: GeoScene, ppu = 24): GeoScene {
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (const it of scene.items) {
+    if (it.shapeId === 'line' && it.endpoints && it.endpoints.length === 2) {
+      const [a, b] = it.endpoints;
+      maxX = Math.max(maxX, a.x, b.x);
+      maxY = Math.max(maxY, a.y, b.y);
+      continue;
+    }
     const ap = resolveItemPos(scene, it);
     const { w, h } = shapePixelSize(
       { shapeId: it.shapeId, params: it.params, showVertices: it.showVertices, showSides: it.showSides, skipLabels: true },

@@ -50,6 +50,9 @@
     last.showEdgeLengths = showEdgeLengths;
     scene = resizeCanvasToContent(s);
   }
+  function addLineItem() {
+    scene = resizeCanvasToContent(addSceneItem(scene, 'line', {}));
+  }
   function removeItem(i: number) {
     const id = scene.items[i]?.id;
     scene = resizeCanvasToContent({
@@ -143,6 +146,7 @@
           <div class="flex items-center justify-between">
             <span class="text-sm font-medium">Bangun dalam gambar ({scene.items.length})</span>
             <Button variant="outline" size="sm" onclick={addItem}><Plus class="h-3.5 w-3.5" /> Tambah bangun</Button>
+        <Button variant="outline" size="sm" onclick={addLineItem}><Plus class="h-3.5 w-3.5" /> Tambah garis</Button>
           </div>
 
           {#each scene.items as it, i (it.id)}
@@ -153,6 +157,9 @@
                   ><Trash2 class="h-4 w-4 text-rose-600" /></Button
                 >
               </div>
+              {#if it.shapeId === 'line'}
+                <p class="text-xs text-muted-foreground">Garis — seret salah satu ujungnya di kanvas untuk mengatur letak.</p>
+              {:else}
               <div class="grid grid-cols-3 gap-3">
                 <div class="col-span-3 flex items-end gap-3">
                   <div class="min-w-0 flex-1">
@@ -199,6 +206,7 @@
                   </label>
                 {/each}
               </div>
+              {/if}
             </div>
           {/each}
         </div>
