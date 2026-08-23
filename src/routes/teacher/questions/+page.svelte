@@ -80,7 +80,7 @@
   async function save() {
     saving = true; formErr = '';
     const hasBenar = f.options.some((o) => Number(o.scoreWeight ?? 0) > 0);
-    if ((f.questionType === 'MCQ' || f.questionType === 'TRUE_FALSE') && !hasBenar) {
+    if ((f.questionType === 'MCQ' || f.questionType === 'TRUE_FALSE' || f.questionType === 'POLY_CHOICE') && !hasBenar) {
       formErr = 'Tandai minimal satu jawaban sebagai "Benar" agar koreksi otomatis berjalan.';
       saving = false;
       return;
@@ -227,7 +227,7 @@
                       />
                     </div>
                   {/if}
-                  {#if f.questionType === 'MCQ'}
+                  {#if f.questionType === 'POLY_CHOICE'}
                     <label class="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground" title="Tandai jawaban benar (bobot 1)">
                       <input type="checkbox" checked={isBenar(o)} onchange={(e: Event) => (o.scoreWeight = (e.currentTarget as HTMLInputElement).checked ? '1' : '0')} class="h-4 w-4 accent-primary" />
                       Benar
@@ -238,7 +238,7 @@
                       Kunci
                     </label>
                   {/if}
-                  {#if f.questionType === 'MCQ'}
+                  {#if f.questionType === 'POLY_CHOICE'}
                     <input type="number" min="0" step="0.5" value={o.scoreWeight} oninput={(e: Event) => (o.scoreWeight = (e.currentTarget as HTMLInputElement).value)} class="h-10 w-20 rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" placeholder="Bobot" title="Bobot jawaban (1 = benar; untuk skala/psikologi isi 0-4 dst.)" />
                   {/if}
                   <Button variant="ghost" size="icon" onclick={() => delOpt(idx)} disabled={f.options.length === 1}><Trash2 class="h-4 w-4 text-rose-600" /></Button>
@@ -246,8 +246,8 @@
               {/each}
             </div>
             <p class="mt-2 text-[11px] text-muted-foreground">
-              {f.questionType === 'MCQ'
-                ? 'Centang "Benar" & isi bobot (1 = benar, 0 = salah, 0.5 = parsial). Skor = jumlah bobot opsi terpilih.'
+              {f.questionType === 'POLY_CHOICE'
+                ? 'Centang "Benar" & isi bobot (1 = benar, 0 = salah, 0.5 = parsial). Skor = jumlah bobot opsi terpilih (tanpa pengali).'
                 : f.questionType === 'MULTI_SELECT'
                   ? 'Boleh memilih lebih dari satu; centang "Kunci" pada semua opsi benar. Skor tetap 1 (tanpa pengali) jika semua kunci tepat, else 0.'
                   : 'Centang "Kunci" pada opsi benar. Skor = pengali paket jika tepat, else 0.'}

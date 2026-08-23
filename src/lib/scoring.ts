@@ -1,10 +1,11 @@
 // Tipe soal yang punya pengali skor di level paket.
-// MCQ berbobot per opsi, MULTI_SELECT skor tetap 1 (keduanya TANPA pengali).
+// POLY_CHOICE (Pilihan Ganda Berbobot) berbobot per opsi, MULTI_SELECT skor tetap 1
+// (keduanya TANPA pengali).
 export const PENGALI_TYPES = [
   "ESSAY",
   "URAIAN_PENDEK",
   "TRUE_FALSE",
-  "POLY_CHOICE",
+  "MCQ",
 ] as const;
 
 export function resolveTypeWeights(raw: unknown): Record<string, number> {
