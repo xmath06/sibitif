@@ -10,17 +10,13 @@
   import Html from '$components/Html.svelte';
   import { importPackages } from '$lib/imports';
   import { QUESTION_TYPE_LABELS as TL } from '$lib/questionTypes';
-  import { NON_MCQ_TYPES, resolveTypeWeights, defaultTypeWeights } from '$lib/scoring';
 
   interface Subject { id: string; name: string; topics?: { id: string; name: string }[] }
-  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number>; typeScoreWeight?: Record<string, number> | null; maxScore?: number }
+  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number>; maxScore?: number }
 
   function pkgBreakdown(p: Pkg) {
     return Object.entries(p.questionTypeCounts ?? {})
-      .map(([t, n]) => {
-        const w = p.typeScoreWeight?.[t] ?? 1;
-        return `${n} ${TL[t as QuestionType]}${w !== 1 ? ` (×${w})` : ''}`;
-      })
+      .map(([t, n]) => `${n} ${TL[t as QuestionType]}`)
       .join(' · ');
   }
 
@@ -31,10 +27,9 @@
 
   let show = $state(false);
   let editing = $state<Pkg | null>(null);
-  let f = $state({ title: '', subjectId: '', hasTimer: true, durationMinutes: '', passScore: '', isRandomQuestions: true, isRandomOptions: false, typeScoreWeight: defaultTypeWeights() });
+  let f = $state({ title: '', subjectId: '', hasTimer: true, durationMinutes: '', passScore: '', isRandomQuestions: true, isRandomOptions: false });
   let saving = $state(false);
   let formErr = $state('');
-  let editingMcqPart = $state(0);
 
   let manageShow = $state(false);
   let managePkg = $state<Pkg | null>(null);
@@ -43,6 +38,7 @@
   let manageSelectedTopics = $state<Record<string, boolean>>({});
   let manageQuestionsByTopic = $state<Record<string, { id: string; questionText: string; questionType: string }[]>>({});
   let manageSelected = $state<Record<string, boolean>>({});
+  let manageScores = $state<Record<string, number>>({});
   let manageLoading = $state(false);
   let manageSaving = $state(false);
   let manageErr = $state('');
@@ -62,26 +58,14 @@
 
   function openCreate() {
     editing = null;
-    f = { title: '', subjectId: subjects[0]?.id ?? '', hasTimer: true, durationMinutes: '', passScore: '', isRandomQuestions: true, isRandomOptions: false, typeScoreWeight: defaultTypeWeights() };
+    f = { title: '', subjectId: subjects[0]?.id ?? '', hasTimer: true, durationMinutes: '', passScore: '', isRandomQuestions: true, isRandomOptions: false };
     formErr = ''; show = true;
   }
   function openEdit(p: Pkg) {
     editing = p;
-    f = { title: p.title, subjectId: p.subjectId ?? '', hasTimer: Boolean(p.hasTimer), durationMinutes: String(p.durationMinutes ?? ''), passScore: String(p.passScore ?? ''), isRandomQuestions: true, isRandomOptions: false, typeScoreWeight: resolveTypeWeights(p.typeScoreWeight) };
-    const tw0 = resolveTypeWeights(p.typeScoreWeight);
-    let nonMcq = 0;
-    for (const [t, n] of Object.entries(p.questionTypeCounts ?? {})) if (t !== 'MCQ') nonMcq += n * (tw0[t] ?? 1);
-    editingMcqPart = (p.maxScore ?? 0) - nonMcq;
+    f = { title: p.title, subjectId: p.subjectId ?? '', hasTimer: Boolean(p.hasTimer), durationMinutes: String(p.durationMinutes ?? ''), passScore: String(p.passScore ?? ''), isRandomQuestions: true, isRandomOptions: false };
     formErr = ''; show = true;
   }
-  const dialogMaxScore = $derived.by(() => {
-    if (!editing) return 0;
-    let nonMcq = 0;
-    for (const [t, n] of Object.entries(editing.questionTypeCounts ?? {})) {
-      if (t !== 'MCQ') nonMcq += n * (f.typeScoreWeight[t] ?? 1);
-    }
-    return nonMcq + editingMcqPart;
-  });
   async function save() {
     saving = true; formErr = '';
     const body: any = {
@@ -90,7 +74,6 @@
       hasTimer: f.hasTimer,
       durationMinutes: f.durationMinutes ? Number(f.durationMinutes) : null,
       passScore: f.passScore ? String(f.passScore) : null,
-      typeScoreWeight: f.typeScoreWeight,
       isRandomQuestions: f.isRandomQuestions,
       isRandomOptions: f.isRandomOptions
     };
@@ -124,6 +107,9 @@
         .map((pq: any) => pq.question?.id)
         .filter(Boolean);
       manageSelected = Object.fromEntries(current.map((id: string) => [id, true]));
+      manageScores = Object.fromEntries(
+        (data?.packageQuestions ?? []).map((pq: any) => [pq.questionId, Number(pq.score ?? 1)]),
+      );
       // Topik yang sudah punya soal terpilih → akan diaktifkan otomatis.
       // (Edit paket tidak lagi mengaktifkan semua topik, hanya yang >0 soal.)
       const selectedTopicIds: string[] = Array.from(
@@ -198,8 +184,15 @@
   }
   function toggleSelect(id: string) {
     const next = { ...manageSelected };
-    if (next[id]) delete next[id];
-    else next[id] = true;
+    if (next[id]) {
+      delete next[id];
+      const sc = { ...manageScores };
+      delete sc[id];
+      manageScores = sc;
+    } else {
+      next[id] = true;
+      manageScores = { ...manageScores, [id]: manageScores[id] ?? 1 };
+    }
     manageSelected = next;
   }
   function selectedCountInTopic(topicId: string) {
@@ -217,7 +210,9 @@
     manageSaving = true;
     manageErr = '';
     try {
-      await api.put(`/packages/${managePkg.id}`, { questionIds: Object.keys(manageSelected) });
+      await api.put(`/packages/${managePkg.id}`, {
+        questions: Object.keys(manageSelected).map((id) => ({ questionId: id, score: Number(manageScores[id] ?? 1) })),
+      });
       manageShow = false;
       await load();
     } catch (e) {
@@ -306,21 +301,6 @@
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={f.hasTimer} class="accent-[hsl(var(--primary))]" /> Ada batas waktu</label>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={f.isRandomQuestions} class="accent-[hsl(var(--primary))]" /> Acak soal</label>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={f.isRandomOptions} class="accent-[hsl(var(--primary))]" /> Acak opsi</label>
-        <div class="rounded-lg border border-border p-3">
-          <p class="mb-1 text-sm font-medium">Bobot Skor per Tipe (pengali)</p>
-          <p class="mb-2 text-xs text-muted-foreground">MCQ berbobot per opsi. Tipe lain: skor tetap 1 × pengali di bawah ini.</p>
-          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {#each NON_MCQ_TYPES as t}
-              <label class="block">
-                <span class="mb-1 block text-xs text-muted-foreground">{TL[t]}{editing?.questionTypeCounts?.[t] ? ` (${editing.questionTypeCounts[t]})` : ''}</span>
-                <input type="number" min="0.5" step="0.5" bind:value={f.typeScoreWeight[t]} class="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
-              </label>
-            {/each}
-          </div>
-          {#if editing}
-            <p class="mt-2 text-xs text-muted-foreground">Total Nilai Maksimal: <span class="font-semibold text-foreground">{dialogMaxScore}</span> (MCQ dihitung dari bobot opsi; tipe lain = jumlah × pengali).</p>
-          {/if}
-        </div>
       <div class="mt-5 flex justify-end gap-2">
         <Button variant="outline" onclick={() => (show = false)}>Batal</Button>
         <Button onclick={save} disabled={saving}>{#if saving}<Loader2 class="h-4 w-4 animate-spin" />{/if} Simpan</Button>
@@ -401,6 +381,10 @@
                   <span class="min-w-0 flex-1">
                     <span class="mb-1 inline-block rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground">{TL[q.questionType as QuestionType]}</span>
                     <Html html={q.questionText} class="text-sm text-foreground" />
+                    <span class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      Poin
+                      <input type="number" min="0" step="0.5" bind:value={manageScores[q.id]} class="h-7 w-20 rounded-md border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
+                    </span>
                   </span>
                 </label>
               {/each}

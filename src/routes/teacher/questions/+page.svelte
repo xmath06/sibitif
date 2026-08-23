@@ -247,10 +247,10 @@
             </div>
             <p class="mt-2 text-[11px] text-muted-foreground">
               {f.questionType === 'MCQ'
-                ? 'Centang "Benar" & isi bobot (1 = benar, 0.5 = parsial). Skor = jumlah bobot opsi terpilih.'
+                ? 'Centang "Benar" & isi bobot sebagai pecahan poin soal (1 = benar, 0.5 = parsial). Skor = poin soal di paket × jumlah bobot terpilih.'
                 : f.questionType === 'MULTI_SELECT'
-                  ? 'Boleh memilih lebih dari satu; centang "Kunci" pada semua opsi benar. Skor penuh jika semua kunci tepat, else 0.'
-                  : 'Centang "Kunci" pada opsi benar. Skor = pengali paket jika tepat, else 0.'}
+                  ? 'Boleh memilih lebih dari satu; centang "Kunci" pada semua opsi benar. Skor penuh = poin soal di paket jika semua kunci tepat, else 0.'
+                  : 'Centang "Kunci" pada opsi benar. Skor = poin soal di paket jika tepat, else 0.'}
             </p>
           </div>
         {/if}
