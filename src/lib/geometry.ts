@@ -808,12 +808,9 @@ export interface SceneLabel {
   y: number;
   letter: string;
   anchor: string;
-  // Untuk titik potong: posisi teks (di-offset agar tak menimpa garis) & apakah
-  // diberi penanda titik (dot). Dot hanya untuk potongan dengan sisi bangun,
-  // bukan antar garis.
+  // Untuk titik potong: posisi teks (di-offset agar tak menimpa garis).
   lx?: number;
   ly?: number;
-  dot?: boolean;
 }
 
 /**
@@ -868,6 +865,12 @@ export function computeSceneLabels(scene: GeoScene, ppu = 24): SceneLabel[] {
     const ay = g.items.reduce((s, i) => s + i.ay, 0) / g.items.length;
     return { x: ax, y: ay, letter, anchor: g.items[0].anchor };
   });
+}
+
+// Vektor satuan.
+function norm(dx: number, dy: number): Pt {
+  const l = Math.hypot(dx, dy) || 1;
+  return { x: dx / l, y: dy / l };
 }
 
 // Titik potong dua segmen (inklusif ujung). null bila sejajar/tidak berpotongan.
@@ -943,28 +946,29 @@ export function computeSceneIntersections(scene: GeoScene, ppu = 24): SceneLabel
       if (!p) continue;
       // Hindari label ganda pada titik yang hampir berimpit.
       if (out.some((o) => Math.hypot(o.x - p.x, o.y - p.y) < 6)) continue;
-      const lineLine = segs[i].kind === 'line' && segs[j].kind === 'line';
-      // Offset teks tegak lurus garis agar tak menimpa garis (lebih terbaca).
-      const dx = segs[i].b.x - segs[i].a.x;
-      const dy = segs[i].b.y - segs[i].a.y;
-      let nx = -dy;
-      let ny = dx;
-      const len = Math.hypot(nx, ny) || 1;
-      nx /= len;
-      ny /= len;
-      if (ny > 0) {
-        nx = -nx;
-        ny = -ny;
+      // Offset teks ke arah tegak lurus bagi sudut dua garis (masuk ke sela)
+      // agar huruf tak tertimpa salah satu garis.
+      const ni = norm(segs[i].b.x - segs[i].a.x, segs[i].b.y - segs[i].a.y);
+      const nj = norm(segs[j].b.x - segs[j].a.x, segs[j].b.y - segs[j].a.y);
+      let bx = ni.x + nj.x;
+      let by = ni.y + nj.y;
+      const bl = Math.hypot(bx, by) || 1;
+      bx /= bl;
+      by /= bl;
+      let px = -by;
+      let py = bx;
+      if (py > 0) {
+        px = -px;
+        py = -py;
       } // bias ke arah atas
-      const off = lineLine ? 11 : 13;
+      const off = 12;
       out.push({
         x: p.x,
         y: p.y,
-        lx: p.x + nx * off,
-        ly: p.y + ny * off + 4,
+        lx: p.x + px * off,
+        ly: p.y + py * off + 4,
         letter: nextLetter(),
-        anchor: 'middle',
-        dot: !lineLine
+        anchor: 'middle'
       });
     }
   }
@@ -1002,10 +1006,10 @@ export function renderScene(scene: GeoScene, pxPerUnit = 24): string {
     .join('');
   // Titik potong garis/sisi bangun diberi label huruf lanjutan.
   const inter = computeSceneIntersections(scene, pxPerUnit)
-    .map((l) => {
-      const dot = l.dot ? `<circle class="int-dot" cx="${fmt(l.x)}" cy="${fmt(l.y)}" r="3.5"/>` : '';
-      return `${dot}<text class="lbl" x="${fmt(l.lx ?? l.x)}" y="${fmt(l.ly ?? l.y + 5)}" text-anchor="middle">${l.letter}</text>`;
-    })
+    .map(
+      (l) =>
+        `<text class="lbl" x="${fmt(l.lx ?? l.x)}" y="${fmt(l.ly ?? l.y + 5)}" text-anchor="middle">${l.letter}</text>`
+    )
     .join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${scene.width} ${scene.height}" width="${scene.width}" height="${scene.height}" role="img" aria-label="Bangun geometri">${GEOMETRY_STYLE}<g>${inner}</g><g class="labels">${labels}${inter}</g></svg>`;
 }

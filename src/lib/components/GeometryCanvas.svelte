@@ -295,7 +295,6 @@
         <text class="lbl" x={l.x} y={l.y} text-anchor={l.anchor}>{l.letter}</text>
       {/each}
       {#each computeSceneIntersections(scene, pxPerUnit) as l (l.x + '_' + l.y + '_' + l.letter)}
-        {#if l.dot}<circle class="int-dot" cx={l.x} cy={l.y} r="3.5" />{/if}
         <text class="lbl" x={l.lx ?? l.x} y={l.ly ?? l.y + 5} text-anchor="middle">{l.letter}</text>
       {/each}
     </svg>
