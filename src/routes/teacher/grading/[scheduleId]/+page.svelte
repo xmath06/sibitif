@@ -7,6 +7,7 @@
   import Button from '$components/ui/Button.svelte';
   import DataTable from '$components/ui/DataTable.svelte';
   import { Loader2, ArrowLeft, Pencil, X, FileCheck2, Download } from 'lucide-svelte';
+  import { resolveTypeWeights } from '$lib/scoring';
   import Html from '$components/Html.svelte';
 
 
@@ -40,10 +41,7 @@
       const d = await api.get(`/grading/${studentExamId}`);
       detail = d as any;
       const se = detail?.studentExam ?? detail;
-      const scoreOf = new Map<string, number>();
-      for (const pq of (se?.schedule?.package?.packageQuestions ?? []) as any[]) {
-        scoreOf.set(pq.questionId, Number(pq.score ?? 1));
-      }
+      const typeWeights = resolveTypeWeights(se?.schedule?.package?.typeScoreWeight);
       essays = (se?.answers ?? [])
         .filter((a: any) => a.question?.questionType === 'ESSAY' || a.question?.questionType === 'URAIAN_PENDEK' || a.questionType === 'ESSAY' || a.questionType === 'URAIAN_PENDEK' || a.essayAnswer)
         .map((a: any) => {
@@ -57,7 +55,7 @@
             score: String(a.score ?? ''),
             teacherFeedback: a.teacherFeedback ?? '',
             questionType: qt,
-            maxScore: scoreOf.get(a.questionId) ?? 1
+            maxScore: typeWeights[qt] ?? 1
           };
         });
       show = true;

@@ -10,13 +10,17 @@
   import Html from '$components/Html.svelte';
   import { importPackages } from '$lib/imports';
   import { QUESTION_TYPE_LABELS as TL } from '$lib/questionTypes';
+  import { NON_MCQ_TYPES, resolveTypeWeights } from '$lib/scoring';
 
   interface Subject { id: string; name: string; topics?: { id: string; name: string }[] }
-  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number>; maxScore?: number }
+  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number>; typeScoreWeight?: Record<string, number> | null; maxScore?: number }
 
   function pkgBreakdown(p: Pkg) {
     return Object.entries(p.questionTypeCounts ?? {})
-      .map(([t, n]) => `${n} ${TL[t as QuestionType]}`)
+      .map(([t, n]) => {
+        const w = p.typeScoreWeight?.[t] ?? 1;
+        return `${n} ${TL[t as QuestionType]}${w !== 1 ? ` (×${w})` : ''}`;
+      })
       .join(' · ');
   }
 
@@ -38,7 +42,7 @@
   let manageSelectedTopics = $state<Record<string, boolean>>({});
   let manageQuestionsByTopic = $state<Record<string, { id: string; questionText: string; questionType: string }[]>>({});
   let manageSelected = $state<Record<string, boolean>>({});
-  let manageScores = $state<Record<string, number>>({});
+  let manageTypeWeights = $state<Record<string, number>>(resolveTypeWeights({}));
   let manageLoading = $state(false);
   let manageSaving = $state(false);
   let manageErr = $state('');
@@ -107,9 +111,7 @@
         .map((pq: any) => pq.question?.id)
         .filter(Boolean);
       manageSelected = Object.fromEntries(current.map((id: string) => [id, true]));
-      manageScores = Object.fromEntries(
-        (data?.packageQuestions ?? []).map((pq: any) => [pq.questionId, Number(pq.score ?? 1)]),
-      );
+      manageTypeWeights = resolveTypeWeights(managePkg?.typeScoreWeight);
       // Topik yang sudah punya soal terpilih → akan diaktifkan otomatis.
       // (Edit paket tidak lagi mengaktifkan semua topik, hanya yang >0 soal.)
       const selectedTopicIds: string[] = Array.from(
@@ -184,15 +186,8 @@
   }
   function toggleSelect(id: string) {
     const next = { ...manageSelected };
-    if (next[id]) {
-      delete next[id];
-      const sc = { ...manageScores };
-      delete sc[id];
-      manageScores = sc;
-    } else {
-      next[id] = true;
-      manageScores = { ...manageScores, [id]: manageScores[id] ?? 1 };
-    }
+    if (next[id]) delete next[id];
+    else next[id] = true;
     manageSelected = next;
   }
   function selectedCountInTopic(topicId: string) {
@@ -211,7 +206,8 @@
     manageErr = '';
     try {
       await api.put(`/packages/${managePkg.id}`, {
-        questions: Object.keys(manageSelected).map((id) => ({ questionId: id, score: Number(manageScores[id] ?? 1) })),
+        questionIds: Object.keys(manageSelected),
+        typeScoreWeight: manageTypeWeights,
       });
       manageShow = false;
       await load();
@@ -353,6 +349,18 @@
           {/if}
         </span>
       </div>
+      <div class="border-b border-border px-5 py-3">
+        <p class="mb-1 text-sm font-medium">Bobot Skor per Tipe (pengali)</p>
+        <p class="mb-2 text-xs text-muted-foreground">MCQ berbobot per opsi. Tipe lain: skor tetap 1 × pengali di bawah ini.</p>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {#each NON_MCQ_TYPES as t}
+            <label class="block">
+              <span class="mb-1 block text-xs text-muted-foreground">{TL[t]}{manageSelectedTypes[t] ? ` (${manageSelectedTypes[t]})` : ''}</span>
+              <input type="number" min="0.5" step="0.5" bind:value={manageTypeWeights[t]} class="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
+            </label>
+          {/each}
+        </div>
+      </div>
       <div class="min-h-[220px] flex-1 space-y-2 overflow-y-auto px-5 py-3">
         {#if manageLoading}
           <div class="grid place-items-center py-10 text-muted-foreground"><Loader2 class="h-5 w-5 animate-spin" /></div>
@@ -381,10 +389,6 @@
                   <span class="min-w-0 flex-1">
                     <span class="mb-1 inline-block rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground">{TL[q.questionType as QuestionType]}</span>
                     <Html html={q.questionText} class="text-sm text-foreground" />
-                    <span class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      Poin
-                      <input type="number" min="0" step="0.5" bind:value={manageScores[q.id]} class="h-7 w-20 rounded-md border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
-                    </span>
                   </span>
                 </label>
               {/each}
