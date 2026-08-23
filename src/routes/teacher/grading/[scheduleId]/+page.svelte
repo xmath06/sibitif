@@ -8,6 +8,7 @@
   import DataTable from '$components/ui/DataTable.svelte';
   import { Loader2, ArrowLeft, Pencil, X, FileCheck2, Download } from 'lucide-svelte';
   import Html from '$components/Html.svelte';
+  import { resolveTypeWeights } from '$lib/scoring';
 
   let scheduleId = $derived($page.params.scheduleId ?? '');
   let loading = $state(true);
@@ -18,7 +19,7 @@
   // modal penilaian esai
   let show = $state(false);
   let detail = $state<any>(null);
-  let essays = $state<{ questionId: string; questionText: string; essayAnswer: string; wordCount?: number; answerKey?: string | null; score: string; teacherFeedback: string }[]>([]);
+  let essays = $state<{ questionId: string; questionText: string; essayAnswer: string; wordCount?: number; answerKey?: string | null; score: string; teacherFeedback: string; questionType: string; maxScore: number }[]>([]);
   let saving = $state(false);
   let formErr = $state('');
 
@@ -39,17 +40,23 @@
       const d = await api.get(`/grading/${studentExamId}`);
       detail = d as any;
       const se = detail?.studentExam ?? detail;
+      const typeWeights = resolveTypeWeights(se?.schedule?.package?.typeScoreWeight);
       essays = (se?.answers ?? [])
         .filter((a: any) => a.question?.questionType === 'ESSAY' || a.question?.questionType === 'URAIAN_PENDEK' || a.questionType === 'ESSAY' || a.questionType === 'URAIAN_PENDEK' || a.essayAnswer)
-        .map((a: any) => ({
-          questionId: a.questionId,
-          questionText: a.question?.questionText ?? '',
-          essayAnswer: a.essayAnswer ?? '',
-          wordCount: a.wordCount ?? undefined,
-          answerKey: a.question?.answerKey ?? null,
-          score: String(a.score ?? ''),
-          teacherFeedback: a.teacherFeedback ?? ''
-        }));
+        .map((a: any) => {
+          const qt = a.question?.questionType ?? a.questionType ?? '';
+          return {
+            questionId: a.questionId,
+            questionText: a.question?.questionText ?? '',
+            essayAnswer: a.essayAnswer ?? '',
+            wordCount: a.wordCount ?? undefined,
+            answerKey: a.question?.answerKey ?? null,
+            score: String(a.score ?? ''),
+            teacherFeedback: a.teacherFeedback ?? '',
+            questionType: qt,
+            maxScore: typeWeights[qt] ?? 1
+          };
+        });
       show = true;
     } catch (e) { formErr = e instanceof ApiError ? e.message : 'Gagal memuat jawaban'; }
   }
@@ -160,8 +167,8 @@
                 <p class="mt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Kunci jawaban</p>
                 <div class="mt-0.5 rounded-lg bg-emerald-50 p-3 text-sm text-foreground">{g.answerKey}</div>
               {/if}
-              <label class="mt-2 block text-sm">Nilai
-                <input bind:value={g.score} type="number" class="ml-2 h-9 w-24 rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
+              <label class="mt-2 block text-sm">Nilai (maks {g.maxScore})
+                <input bind:value={g.score} type="number" min="0" max={g.maxScore} step="0.5" class="ml-2 h-9 w-24 rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
               </label>
               <textarea bind:value={g.teacherFeedback} rows="2" placeholder="Catatan (opsional)" class="mt-2 w-full rounded-lg border border-border bg-card p-2 text-sm outline-none focus:ring-2 focus:ring-ring"></textarea>
             </div>

@@ -10,13 +10,17 @@
   import Html from '$components/Html.svelte';
   import { importPackages } from '$lib/imports';
   import { QUESTION_TYPE_LABELS as TL } from '$lib/questionTypes';
+  import { NON_MCQ_TYPES, resolveTypeWeights, defaultTypeWeights } from '$lib/scoring';
 
   interface Subject { id: string; name: string; topics?: { id: string; name: string }[] }
-  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number> }
+  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number>; typeScoreWeight?: Record<string, number> | null }
 
   function pkgBreakdown(p: Pkg) {
     return Object.entries(p.questionTypeCounts ?? {})
-      .map(([t, n]) => `${n} ${TL[t as QuestionType]}`)
+      .map(([t, n]) => {
+        const w = p.typeScoreWeight?.[t] ?? 1;
+        return `${n} ${TL[t as QuestionType]}${w !== 1 ? ` (×${w})` : ''}`;
+      })
       .join(' · ');
   }
 
@@ -27,7 +31,7 @@
 
   let show = $state(false);
   let editing = $state<Pkg | null>(null);
-  let f = $state({ title: '', subjectId: '', hasTimer: true, durationMinutes: '', passScore: '', isRandomQuestions: true, isRandomOptions: false });
+  let f = $state({ title: '', subjectId: '', hasTimer: true, durationMinutes: '', passScore: '', isRandomQuestions: true, isRandomOptions: false, typeScoreWeight: defaultTypeWeights() });
   let saving = $state(false);
   let formErr = $state('');
 
@@ -57,12 +61,12 @@
 
   function openCreate() {
     editing = null;
-    f = { title: '', subjectId: subjects[0]?.id ?? '', hasTimer: true, durationMinutes: '', passScore: '', isRandomQuestions: true, isRandomOptions: false };
+    f = { title: '', subjectId: subjects[0]?.id ?? '', hasTimer: true, durationMinutes: '', passScore: '', isRandomQuestions: true, isRandomOptions: false, typeScoreWeight: defaultTypeWeights() };
     formErr = ''; show = true;
   }
   function openEdit(p: Pkg) {
     editing = p;
-    f = { title: p.title, subjectId: p.subjectId ?? '', hasTimer: Boolean(p.hasTimer), durationMinutes: String(p.durationMinutes ?? ''), passScore: String(p.passScore ?? ''), isRandomQuestions: true, isRandomOptions: false };
+    f = { title: p.title, subjectId: p.subjectId ?? '', hasTimer: Boolean(p.hasTimer), durationMinutes: String(p.durationMinutes ?? ''), passScore: String(p.passScore ?? ''), isRandomQuestions: true, isRandomOptions: false, typeScoreWeight: resolveTypeWeights(p.typeScoreWeight) };
     formErr = ''; show = true;
   }
   async function save() {
@@ -73,6 +77,7 @@
       hasTimer: f.hasTimer,
       durationMinutes: f.durationMinutes ? Number(f.durationMinutes) : null,
       passScore: f.passScore ? String(f.passScore) : null,
+      typeScoreWeight: f.typeScoreWeight,
       isRandomQuestions: f.isRandomQuestions,
       isRandomOptions: f.isRandomOptions
     };
@@ -287,6 +292,18 @@
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={f.hasTimer} class="accent-[hsl(var(--primary))]" /> Ada batas waktu</label>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={f.isRandomQuestions} class="accent-[hsl(var(--primary))]" /> Acak soal</label>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={f.isRandomOptions} class="accent-[hsl(var(--primary))]" /> Acak opsi</label>
+        <div class="rounded-lg border border-border p-3">
+          <p class="mb-1 text-sm font-medium">Bobot Skor per Tipe (pengali)</p>
+          <p class="mb-2 text-xs text-muted-foreground">MCQ berbobot per opsi. Tipe lain: skor tetap 1 × pengali di bawah ini.</p>
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {#each NON_MCQ_TYPES as t}
+              <label class="block">
+                <span class="mb-1 block text-xs text-muted-foreground">{TL[t]}{editing?.questionTypeCounts?.[t] ? ` (${editing.questionTypeCounts[t]})` : ''}</span>
+                <input type="number" min="0.5" step="0.5" bind:value={f.typeScoreWeight[t]} class="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
+              </label>
+            {/each}
+          </div>
+        </div>
       </div>
       <div class="mt-5 flex justify-end gap-2">
         <Button variant="outline" onclick={() => (show = false)}>Batal</Button>

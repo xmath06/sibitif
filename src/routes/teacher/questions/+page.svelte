@@ -227,23 +227,30 @@
                       />
                     </div>
                   {/if}
-                  {#if f.questionType !== 'POLY_CHOICE'}
+                  {#if f.questionType === 'MCQ'}
                     <label class="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground" title="Tandai jawaban benar (bobot 1)">
                       <input type="checkbox" checked={isBenar(o)} onchange={(e: Event) => (o.scoreWeight = (e.currentTarget as HTMLInputElement).checked ? '1' : '0')} class="h-4 w-4 accent-primary" />
                       Benar
                     </label>
+                  {:else}
+                    <label class="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground" title="Tandai opsi ini sebagai kunci jawaban">
+                      <input type="checkbox" checked={isBenar(o)} onchange={(e: Event) => (o.scoreWeight = (e.currentTarget as HTMLInputElement).checked ? '1' : '0')} class="h-4 w-4 accent-primary" />
+                      Kunci
+                    </label>
                   {/if}
-                  <input type="number" min="0" step="0.5" value={o.scoreWeight} oninput={(e: Event) => (o.scoreWeight = (e.currentTarget as HTMLInputElement).value)} class="h-10 w-20 rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" placeholder="Bobot" title="Bobot jawaban (1 = benar; untuk skala/psikologi isi 0-4 dst.)" />
+                  {#if f.questionType === 'MCQ'}
+                    <input type="number" min="0" step="0.5" value={o.scoreWeight} oninput={(e: Event) => (o.scoreWeight = (e.currentTarget as HTMLInputElement).value)} class="h-10 w-20 rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" placeholder="Bobot" title="Bobot jawaban (1 = benar; untuk skala/psikologi isi 0-4 dst.)" />
+                  {/if}
                   <Button variant="ghost" size="icon" onclick={() => delOpt(idx)} disabled={f.options.length === 1}><Trash2 class="h-4 w-4 text-rose-600" /></Button>
                 </div>
               {/each}
             </div>
             <p class="mt-2 text-[11px] text-muted-foreground">
-              {f.questionType === 'POLY_CHOICE'
-                ? 'Setiap opsi punya bobot; nilai siswa = bobot opsi yang dipilih (cocok untuk skala/tes psikologi).'
+              {f.questionType === 'MCQ'
+                ? 'Centang "Benar" & isi bobot (1 = benar, 0.5 = parsial). Skor = jumlah bobot opsi terpilih.'
                 : f.questionType === 'MULTI_SELECT'
-                  ? 'Boleh memilih lebih dari satu; nilai = jumlah bobot opsi yang dipilih.'
-                  : 'Centang "Benar" pada jawaban yang benar (bobot 1) agar koreksi otomatis bekerja.'}
+                  ? 'Boleh memilih lebih dari satu; centang "Kunci" pada semua opsi benar. Skor penuh jika semua kunci tepat, else 0.'
+                  : 'Centang "Kunci" pada opsi benar. Skor = pengali paket jika tepat, else 0.'}
             </p>
           </div>
         {/if}
