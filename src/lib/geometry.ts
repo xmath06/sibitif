@@ -16,7 +16,7 @@ interface Pt3 { x: number; y: number; z: number }
 export interface GeometryShapeDef {
   id: string;
   label: string;
-  kind: '2d' | '3d';
+  kind: '2d' | '3d' | 'line';
   params: { key: string; label: string; def: number }[];
 }
 
@@ -41,7 +41,9 @@ export const GEOMETRY_SHAPES: GeometryShapeDef[] = [
   { id: 'cone', label: 'Kerucut', kind: '3d', params: [{ key: 'r', label: 'Jari-jari', def: 2 }, { key: 'h', label: 'Tinggi', def: 4 }] },
   { id: 'sphere', label: 'Bola', kind: '3d', params: [{ key: 'r', label: 'Jari-jari', def: 2.5 }] },
   { id: 'tri_prism', label: 'Prisma Segitiga', kind: '3d', params: [{ key: 'base', label: 'Alas segitiga', def: 4 }, { key: 'height', label: 'Tinggi segitiga', def: 3 }, { key: 'depth', label: 'Kedalaman', def: 4 }] },
-  { id: 'pyramid', label: 'Limas', kind: '3d', params: [{ key: 'base', label: 'Alas', def: 4 }, { key: 'height', label: 'Tinggi', def: 5 }] }
+  { id: 'pyramid', label: 'Limas', kind: '3d', params: [{ key: 'base', label: 'Alas', def: 4 }, { key: 'height', label: 'Tinggi', def: 5 }] },
+  // ── Lainnya ─────────────────────────────────────────
+  { id: 'line', label: 'Garis', kind: 'line', params: [] }
 ];
 
 export function geometryShape(id: string): GeometryShapeDef | undefined {

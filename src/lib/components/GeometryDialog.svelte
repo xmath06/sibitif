@@ -178,6 +178,11 @@
                           <option value={s.id}>{s.label}</option>
                         {/each}
                       </optgroup>
+                      <optgroup label="Lainnya">
+                        {#each GEOMETRY_SHAPES.filter((s) => s.kind === 'line') as s (s.id)}
+                          <option value={s.id}>{s.label}</option>
+                        {/each}
+                      </optgroup>
                     </select>
                   </div>
                   <label class="block w-16">
@@ -228,7 +233,7 @@
 
         <div>
           <p class="mb-2 text-xs text-muted-foreground">
-            Tarik tiap bangun untuk memindahkan · tarik titik biru di pojok untuk mengubah ukuran · gabungkan dengan mendekatkan bangun.
+            Tarik tiap bangun untuk memindahkan · tarik titik biru di pojok untuk mengubah ukuran · untuk Garis, seret salah satu ujungnya · gabungkan dengan mendekatkan bangun.
           </p>
           <GeometryCanvas bind:scene={scene} editable={true} showToolbar={false} />
         </div>
