@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { api, ApiError } from '$api/client';
   import type { StartExamResponse, Question, Timer } from '$api/types';
   import Button from '$components/ui/Button.svelte';
@@ -11,6 +11,10 @@
   import Html from '$components/Html.svelte';
   import RichTextEditor from '$components/RichTextEditor.svelte';
   import { QUESTION_TYPE_LABELS as TL } from '$lib/questionTypes';
+  import { AntiCheat } from '$lib/antiCheat';
+
+  // Anti-cheat ringan: batas pelanggaran sebelum auto-submit (0 = hanya peringatan).
+  const ANTI_CHEAT_MAX = 0;
 
   let { studentExamId }: { studentExamId: string } = $props();
 
@@ -19,6 +23,10 @@
   let submitting = $state(false);
   let submitError = $state('');
   let exam = $state<StartExamResponse | null>(null);
+  let examRoot: HTMLElement;
+  let ac: AntiCheat | null = null;
+  let violations = $state(0);
+  let lastReason = $state('');
   let currentId = $state<string>('');
   let collapsed = $state(false);
   let saveState = $state<'idle' | 'saving' | 'saved'>('idle');
@@ -198,7 +206,21 @@
   }
 
   let poll: ReturnType<typeof setInterval>;
-  let tick: ReturnType<typeof setInterval>;
+  let tickT: ReturnType<typeof setInterval>;
+
+  // Auto-submit tanpa konfirmasi (dipicu anti-cheat bila melebihi batas).
+  async function forceSubmit() {
+    if (!exam || submitting) return;
+    submitting = true;
+    try {
+      await doSave();
+      await api.post(`/exams/${studentExamId}/submit`);
+      location.href = `/student/result/${studentExamId}`;
+    } catch (e) {
+      submitError = e instanceof ApiError ? e.message : 'Gagal mengumpulkan ujian. Coba lagi.';
+      submitting = false;
+    }
+  }
 
   onMount(async () => {
     // Di layar kecil (HP) sidebar navigasi memakan terlalu banyak ruang → collapse otomatis.
@@ -216,8 +238,21 @@
       loading = false;
     }
 
+    // Anti-cheat ringan: pasang setelah DOM ujian termuat.
+    await tick();
+    ac = new AntiCheat({
+      container: examRoot,
+      maxViolations: ANTI_CHEAT_MAX,
+      onViolation: (count, reason) => {
+        violations = count;
+        lastReason = reason;
+      },
+      onForceSubmit: forceSubmit
+    });
+    ac.start();
+
     // sinkron jam server + cek deadline tiap 5 detik
-    tick = setInterval(() => (now = Date.now()), 1000);
+    tickT = setInterval(() => (now = Date.now()), 1000);
     poll = setInterval(async () => {
       try {
         const res = await api.get<{ data: { remainingSeconds: number; expired: boolean; deadlineAt: number; serverNow: number | string } }>(
@@ -240,8 +275,9 @@
 
   onDestroy(() => {
     if (poll) clearInterval(poll);
-    if (tick) clearInterval(tick);
+    if (tickT) clearInterval(tickT);
     if (saveTimer) clearTimeout(saveTimer);
+    ac?.destroy();
   });
 
   const currentQuestion = $derived(exam?.questions.find((q) => q.id === currentId) ?? null);
@@ -252,7 +288,7 @@
 {:else if errorMsg}
   <div class="grid h-[60vh] place-items-center text-rose-600">{errorMsg}</div>
 {:else if exam}
-  <div class="flex h-screen flex-col bg-background">
+  <div class="flex h-screen flex-col bg-background" bind:this={examRoot}>
     <!-- Header ringkas -->
     <header class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-card px-4 py-2.5 shadow-sm">
       <Button variant="ghost" size="icon" onclick={() => (collapsed = !collapsed)} title="Sembunyikan navigasi">
@@ -302,6 +338,12 @@
 
     {#if schedulePaused}
       <div class="bg-amber-50 px-4 py-1.5 text-center text-sm font-medium text-amber-700">Ujian dijeda oleh pengawas.</div>
+    {/if}
+
+    {#if violations > 0}
+      <div class="bg-rose-50 px-4 py-1.5 text-center text-sm font-medium text-rose-700">
+        ⚠ Peringatan: terdeteksi keluar dari ujian ({violations} kali){lastReason ? ` — ${lastReason}` : ''}. Tindakan ini tercatat.
+      </div>
     {/if}
 
     <div class="flex min-h-0 flex-1">
