@@ -102,8 +102,10 @@ Drizzle `numeric` dikirim sebagai **string** dari backend — konversi ke number
 
 ## Fitur Penting per Halaman
 
+- **Bank Soal (`/teacher/subjects`, `/teacher/questions`)** — **ADMIN**: tampilan v1 (grid mata pelajaran + topik bersarang di tiap kartu, tanpa badge kepemilikan, tanpa toggle "Bagikan", bisa edit/hapus semua). **TEACHER**: grid topik datar lintas mapel yang diampu + badge "Milik: Saya / Guru X / Admin", tombol "Tambah Topik" (pilih mapel), tidak bisa membuat mata pelajaran. Jangan samakan kedua tampilan.
+- **Import Excel** (`ExcelImportButton`): **ADMIN** mendapat pemilih pemilik (import sebagai "Admin" atau "Guru tertentu" — menjembatani guru yang tak bisa import); **TEACHER** tidak melihat picker, import otomatis milik diri sendiri. `onImport(rows, ownerUserId?)` meneruskan pemilik ke `lib/imports.ts` → `createdByUserId` di backend.
 - **`/teacher/questions`** — bank soal per topik; form memakai RichTextEditor (rumus/tabel/gambar). Membuat soal: `minWordCount`/`maxWordCount` hanya dikirim jika terisi (backend menolak `null`).
-- **`/teacher/packages`** — kartu paket + tombol **Kelola Soal**: pilih **mapel → banyak topik** (chip) → centang soal per topik (ada tombol "Semua") → Simpan mengirim seluruh `questionIds` (`PUT /packages/:id`).
+- **`/teacher/packages`** — kartu paket + tombol **Kelola Soal**: pilih **mapel → banyak topik** (chip) → centang soal per topik (ada tombol "Semua") → Simpan mengirim seluruh `questionIds` (`PUT /packages/:id`). Paket/jadwal buatan admin tampil read-only untuk guru (badge "Milik: Admin"); guru hanya bisa edit/hapus milik sendiri.
 - **`/student/exam/[id]`** — `ExamSheet`: timer **server-synced** (hitung dari `deadlineAt`, bukan `remainingSeconds`), auto-save debounced, warning esai di bawah `minWordCount` bersifat **peringatan saja**, submit otomatis saat `expired`.
 - **`/teacher/monitor/[scheduleId]`** & **`/schedules/[id]/projector`** — status polling JSON (`{success,data}`) & SSE stream (payload double-wrapped `data: {"data":{…}}` — gunakan `payload.data`).
 
