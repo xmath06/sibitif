@@ -120,16 +120,23 @@
 <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
   <div>
     <h1 class="text-xl font-bold text-foreground">Bank Soal</h1>
-    <p class="text-sm text-muted-foreground">
-      Topik & soal dari mata pelajaran yang Anda ampu. Guru tidak dapat membuat mata pelajaran —
-      penetapan mapel diatur oleh admin.
-    </p>
+    {#if isAdmin}
+      <p class="text-sm text-muted-foreground">
+        Kelola mata pelajaran & topik soal. Klik sebuah mata pelajaran untuk mengelola topiknya.
+      </p>
+    {:else}
+      <p class="text-sm text-muted-foreground">
+        Topik & soal dari mata pelajaran yang Anda ampu. Guru tidak dapat membuat mata pelajaran —
+        penetapan mapel diatur oleh admin.
+      </p>
+    {/if}
   </div>
   <div class="flex flex-wrap gap-2">
     {#if isAdmin}
       <Button variant="outline" onclick={openCreateSubj}><BookOpen class="h-4 w-4" /> Kelola Mata Pelajaran</Button>
+    {:else}
+      <Button onclick={openCreateTopic} disabled={subjects.length === 0}><Plus class="h-4 w-4" /> Tambah Topik</Button>
     {/if}
-    <Button onclick={openCreateTopic} disabled={subjects.length === 0}><Plus class="h-4 w-4" /> Tambah Topik</Button>
   </div>
 </div>
 
@@ -137,6 +144,26 @@
 
 {#if loading}
   <div class="grid place-items-center py-20 text-muted-foreground"><Loader2 class="h-6 w-6 animate-spin" /></div>
+{:else if isAdmin}
+  {#if subjects.length === 0}
+    <Card class="p-8 text-center text-muted-foreground">
+      Belum ada mata pelajaran. Klik “Kelola Mata Pelajaran” untuk menambah.
+    </Card>
+  {:else}
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {#each subjects as s (s.id)}
+        <Card class="flex flex-col p-5">
+          <div class="min-w-0">
+            <span class="inline-block rounded bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground">{s.code}</span>
+            <h3 class="mt-1.5 font-semibold text-foreground">{s.name}</h3>
+          </div>
+          <Button variant="outline" size="sm" class="mt-3" onclick={() => goto(`/teacher/subjects/${s.id}/topics`)}>
+            Kelola Topik
+          </Button>
+        </Card>
+      {/each}
+    </div>
+  {/if}
 {:else if topics.length === 0}
   <Card class="p-8 text-center text-muted-foreground">
     {#if subjects.length === 0}
