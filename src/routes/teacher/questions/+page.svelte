@@ -21,6 +21,9 @@
 
   const TYPES: QuestionType[] = ['MCQ', 'ESSAY', 'TRUE_FALSE', 'POLY_CHOICE', 'MULTI_SELECT', 'URAIAN_PENDEK'];
 
+  // ADMIN: tampilan persis v1 (tidak ada pengelompokan berdasarkan guru).
+  const isAdmin = $derived($user?.role === 'ADMIN');
+
   function isBenar(o: Opt) { return Number(o.scoreWeight ?? 0) > 0; }
   function kunciOf(q: Question) {
     return q.options.map((o, i) => (isBenar(o) ? String.fromCharCode(65 + i) : '')).filter(Boolean).join(', ');
@@ -166,8 +169,10 @@
           <div class="min-w-0">
             <p class="text-xs text-muted-foreground">Soal {i + 1}
               <Badge tone="primary" class="ml-1">{TL[q.questionType]}</Badge>
-              {#if owned}<Badge tone="primary" class="ml-1">Milik Saya</Badge>
-              {:else if q.isShared}<Badge tone="default" class="ml-1">Dibagikan dari {q.createdByUser?.name ?? 'Guru lain'}</Badge>{/if}
+              {#if !isAdmin}
+                {#if owned}<Badge tone="primary" class="ml-1">Milik Saya</Badge>
+                {:else if q.isShared}<Badge tone="default" class="ml-1">Dibagikan dari {q.createdByUser?.name ?? 'Guru lain'}</Badge>{/if}
+              {/if}
             </p>
             <Html html={q.questionText} class="mt-0.5 text-sm text-foreground" />
             {#if q.options.length}
@@ -185,7 +190,12 @@
             <p class="mt-1 text-xs text-muted-foreground">Kunci: {q.answerKey}</p>
           {/if}
           <div class="flex shrink-0 flex-col items-end gap-1">
-            {#if owned}
+            {#if isAdmin}
+              <div class="flex gap-1">
+                <Button variant="ghost" size="icon" onclick={() => openEdit(q)} title="Edit"><Pencil class="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" onclick={() => del(q)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
+              </div>
+            {:else if owned}
               <div class="flex gap-1">
                 <Button variant="ghost" size="icon" onclick={() => openEdit(q)} title="Edit"><Pencil class="h-4 w-4" /></Button>
                 <Button variant="ghost" size="icon" onclick={() => del(q)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
@@ -278,10 +288,12 @@
           </div>
         {/if}
       </div>
-      <label class="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-        <input type="checkbox" bind:checked={f.isShared} class="h-4 w-4 accent-primary" />
-        <Share2 class="h-4 w-4" /> Izinkan guru lain yang mengampu mapel ini menggunakan soal ini (Bagikan)
-      </label>
+      {#if !isAdmin}
+        <label class="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+          <input type="checkbox" bind:checked={f.isShared} class="h-4 w-4 accent-primary" />
+          <Share2 class="h-4 w-4" /> Izinkan guru lain yang mengampu mapel ini menggunakan soal ini (Bagikan)
+        </label>
+      {/if}
 
       <div class="mt-5 flex justify-end gap-2">
         <Button variant="outline" onclick={() => (show = false)}>Batal</Button>
