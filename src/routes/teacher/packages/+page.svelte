@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api, ApiError } from '$api/client';
   import type { QuestionType } from '$api/types';
+  import { user } from '$lib/stores/session';
   import Card from '$components/ui/Card.svelte';
   import Badge from '$components/ui/Badge.svelte';
   import Button from '$components/ui/Button.svelte';
@@ -13,7 +14,7 @@
   import { PENGALI_TYPES, resolveTypeWeights } from '$lib/scoring';
 
   interface Subject { id: string; name: string; topics?: { id: string; name: string }[] }
-  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number>; typeScoreWeight?: Record<string, number> | null; maxScore?: number }
+  interface Pkg { id: string; title: string; subjectId?: string | null; subject?: { name?: string }; hasTimer?: boolean; durationMinutes?: number | null; passScore?: string | null; questionCount?: number; questionTypeCounts?: Record<string, number>; typeScoreWeight?: Record<string, number> | null; maxScore?: number; createdByUserId?: string | null; createdByUser?: { id: string; name: string } | null; isOwnedByMe?: boolean }
 
   function pkgBreakdown(p: Pkg) {
     return Object.entries(p.questionTypeCounts ?? {})
@@ -22,6 +23,12 @@
         return `${n} ${TL[t as QuestionType]}${w !== 1 ? ` (×${w})` : ''}`;
       })
       .join(' · ');
+  }
+
+  // Guru hanya boleh edit/hapus paket miliknya sendiri. Paket buatan admin
+  // (atau guru lain) tampil read-only. ADMIN bebas mengedit semua.
+  function canEdit(p: Pkg) {
+    return $user?.role === 'ADMIN' || !!p.isOwnedByMe;
   }
 
   let packages = $state<Pkg[]>([]);
@@ -251,12 +258,21 @@
     {#each packages as p (p.id)}
       <Card class="flex flex-col p-5">
         <div class="mb-1 flex items-start justify-between gap-2">
-          <h3 class="font-semibold text-foreground">{p.title}</h3>
+          <div class="min-w-0">
+            <h3 class="font-semibold text-foreground">{p.title}</h3>
+            {#if p.isOwnedByMe}
+              <Badge tone="primary" class="mt-1">Milik Saya</Badge>
+            {:else if p.createdByUser}
+              <Badge tone="muted" class="mt-1">Buatan {p.createdByUser.name}</Badge>
+            {:else}
+              <Badge tone="muted" class="mt-1">Buatan Admin</Badge>
+            {/if}
+          </div>
           <div class="flex gap-1">
-            <Button variant="ghost" size="icon" onclick={() => openManage(p)} title="Kelola Soal"><Layers class="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" onclick={() => openManage(p)} title="Kelola Soal" disabled={!canEdit(p)}><Layers class="h-4 w-4" /></Button>
             <Button variant="ghost" size="icon" onclick={() => dl(p)} title="Download DOCX"><Download class="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" onclick={() => openEdit(p)} title="Edit"><Pencil class="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" onclick={() => del(p)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
+            <Button variant="ghost" size="icon" onclick={() => openEdit(p)} title="Edit" disabled={!canEdit(p)}><Pencil class="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" onclick={() => del(p)} title="Hapus" disabled={!canEdit(p)}><Trash2 class="h-4 w-4 text-rose-600" /></Button>
           </div>
         </div>
         <p class="text-sm text-muted-foreground">{p.subject?.name ?? subjects.find((s) => s.id === p.subjectId)?.name ?? '—'}</p>

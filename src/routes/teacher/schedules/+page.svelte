@@ -11,7 +11,7 @@
   import { importSchedules } from '$lib/imports';
   import { formatClock } from '$lib/utils';
 
-  interface Sched { id: string; title: string; scheduleStatus: ScheduleStatus; category?: string | null; accessCode?: string | null; showResultImmediately?: boolean; targetType?: TargetType; package?: { title?: string }; startTime?: string | null; endTime?: string | null; allocations?: { id: string }[] }
+  interface Sched { id: string; title: string; scheduleStatus: ScheduleStatus; category?: string | null; accessCode?: string | null; showResultImmediately?: boolean; targetType?: TargetType; package?: { title?: string }; startTime?: string | null; endTime?: string | null; allocations?: { id: string }[]; createdByUserId?: string | null; createdByUser?: { id: string; name: string } | null; isOwnedByMe?: boolean }
 
   let schedules = $state<Sched[]>([]);
   let packages = $state<any[]>([]);
@@ -40,10 +40,13 @@
     return s === 'ON_GOING' ? 'success' : s === 'PAUSED' ? 'warning' : s === 'ENDED' ? 'muted' : 'default';
   }
 
-  // Admin: boleh edit kapan saja. Guru: hanya sebelum jadwal mulai (SCHEDULED & startTime belum lewat).
+  // Admin: boleh edit kapan saja. Guru: hanya milik sendiri & sebelum jadwal
+  // mulai (SCHEDULED & startTime belum lewat). Jadwal buatan admin/guru lain
+  // tampil read-only untuk guru.
   function canEdit(s: Sched) {
     if ($user?.role === 'ADMIN') return true;
     if ($user?.role === 'TEACHER') {
+      if (!s.isOwnedByMe) return false;
       return s.scheduleStatus === 'SCHEDULED' && new Date(s.startTime ?? '').getTime() > Date.now();
     }
     return false;
@@ -78,8 +81,17 @@
   <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
     {#each schedules as s (s.id)}
       <Card class="flex flex-col p-5">
-<div class="mb-2 flex items-start justify-between gap-2">
-            <h3 class="font-semibold text-foreground">{s.title}</h3>
+ <div class="mb-2 flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <h3 class="font-semibold text-foreground">{s.title}</h3>
+              {#if s.isOwnedByMe}
+                <Badge tone="primary" class="mt-1">Milik Saya</Badge>
+              {:else if s.createdByUser}
+                <Badge tone="muted" class="mt-1">Buatan {s.createdByUser.name}</Badge>
+              {:else}
+                <Badge tone="muted" class="mt-1">Buatan Admin</Badge>
+              {/if}
+            </div>
             <div class="flex items-center gap-1.5">
               {#if s.category}<Badge>{s.category}</Badge>{/if}
               <Badge tone={statusTone(s.scheduleStatus)}>{s.scheduleStatus}</Badge>
@@ -94,7 +106,7 @@
           <Button variant="outline" size="sm" onclick={() => (location.href = `/schedules/${s.id}/projector`)}><MonitorPlay class="h-4 w-4" /> Proyektor</Button>
           <Button variant="outline" size="sm" onclick={() => (location.href = `/teacher/monitor/${s.id}`)}><GraduationCap class="h-4 w-4" /> Monitor</Button>
           <Button variant="outline" size="sm" onclick={() => (location.href = `/teacher/grading/${s.id}`)}><FileCheck2 class="h-4 w-4" /> Koreksi</Button>
-          <Button variant="ghost" size="sm" onclick={() => del(s)}><Trash2 class="h-4 w-4 text-rose-600" /></Button>
+          <Button variant="ghost" size="sm" onclick={() => del(s)} disabled={!canEdit(s)}><Trash2 class="h-4 w-4 text-rose-600" /></Button>
           {#if canEdit(s)}<Button variant="outline" size="sm" onclick={() => (location.href = `/teacher/schedules/${s.id}/edit`)}><Pencil class="h-4 w-4" /> Edit</Button>{/if}
         </div>
       </Card>
