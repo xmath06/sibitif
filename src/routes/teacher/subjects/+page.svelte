@@ -19,12 +19,6 @@
   let savingSubj = $state(false);
   let subjErr = $state('');
 
-  let showTopic = $state(false);
-  let topicSubjectId = $state('');
-  let topicName = $state('');
-  let savingTopic = $state(false);
-  let topicErr = $state('');
-
   async function load() {
     loading = true; error = '';
     try {
@@ -53,22 +47,6 @@
     await api.del(`/subjects/${s.id}`); await load();
   }
 
-  function openTopic(subjectId: string) {
-    topicSubjectId = subjectId; topicName = ''; topicErr = ''; showTopic = true;
-  }
-  async function saveTopic() {
-    savingTopic = true; topicErr = '';
-    try {
-      await api.post('/topics', { subjectId: topicSubjectId, name: topicName });
-      showTopic = false; await load();
-    } catch (e) { topicErr = e instanceof ApiError ? e.message : 'Gagal menyimpan'; }
-    finally { savingTopic = false; }
-  }
-  async function delTopic(subjectId: string, t: Topic) {
-    if (!confirm(`Hapus topik "${t.name}"?`)) return;
-    await api.del(`/topics/${t.id}`); await load();
-  }
-
   onMount(load);
 </script>
 
@@ -88,30 +66,23 @@
 {:else}
   <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
     {#each subjects as s (s.id)}
-      <Card class="flex flex-col p-5">
-        <div class="mb-1 flex items-start justify-between gap-2">
-          <div>
-            <p class="text-xs font-mono text-muted-foreground">{s.code}</p>
-            <h3 class="font-semibold text-foreground">{s.name}</h3>
-          </div>
-          <div class="flex gap-1">
-            <Button variant="ghost" size="icon" onclick={() => openSubj(s)} title="Edit"><Pencil class="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" onclick={() => delSubj(s)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
-          </div>
-        </div>
-        <div class="mt-2 space-y-1.5">
-          {#each s.topics as t (t.id)}
-            <div class="flex items-center justify-between rounded-lg bg-accent/60 px-3 py-1.5 text-sm">
-              <span class="inline-flex items-center gap-1.5 text-foreground"><ListTree class="h-3.5 w-3.5 text-muted-foreground" />{t.name}</span>
-              <div class="flex items-center gap-1">
-                <a href={`/teacher/questions?topicId=${t.id}`} class="text-xs font-medium text-primary hover:underline">Soal</a>
-                <button onclick={() => delTopic(s.id, t)} class="text-rose-600"><Trash2 class="h-3.5 w-3.5" /></button>
-              </div>
+      <a href={`/teacher/subjects/${s.id}/topics`} class="block">
+        <Card class="flex cursor-pointer flex-col p-5 transition hover:ring-2 hover:ring-ring">
+          <div class="mb-1 flex items-start justify-between gap-2">
+            <div>
+              <p class="text-xs font-mono text-muted-foreground">{s.code}</p>
+              <h3 class="font-semibold text-foreground">{s.name}</h3>
             </div>
-          {/each}
-        </div>
-        <Button variant="outline" size="sm" class="mt-3" onclick={() => openTopic(s.id)}><Plus class="h-3.5 w-3.5" /> Topik</Button>
-      </Card>
+            <div class="flex gap-1" onclick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" onclick={() => openSubj(s)} title="Edit"><Pencil class="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" onclick={() => delSubj(s)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
+            </div>
+          </div>
+          <p class="mt-2 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            <ListTree class="h-3.5 w-3.5" />{s.topics?.length ?? 0} topik
+          </p>
+        </Card>
+      </a>
     {/each}
   </div>
 {/if}
@@ -131,23 +102,6 @@
       <div class="mt-5 flex justify-end gap-2">
         <Button variant="outline" onclick={() => (showSubj = false)}>Batal</Button>
         <Button onclick={saveSubj} disabled={savingSubj}>{#if savingSubj}<Loader2 class="h-4 w-4 animate-spin" />{/if} Simpan</Button>
-      </div>
-    </Card>
-  </div>
-{/if}
-
-{#if showTopic}
-  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onclick={(e) => e.target === e.currentTarget && (showTopic = false)} onkeydown={(e) => e.key === 'Escape' && (showTopic = false)}>
-    <Card class="w-full max-w-md p-6">
-      <div class="mb-4 flex items-center justify-between">
-        <h3 class="text-base font-semibold text-foreground">Tambah Topik</h3>
-        <button onclick={() => (showTopic = false)} class="text-muted-foreground hover:text-foreground"><X class="h-5 w-5" /></button>
-      </div>
-      {#if topicErr}<p class="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{topicErr}</p>{/if}
-      <label class="block"><span class="mb-1 block text-sm font-medium">Nama Topik</span><input bind:value={topicName} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring" /></label>
-      <div class="mt-5 flex justify-end gap-2">
-        <Button variant="outline" onclick={() => (showTopic = false)}>Batal</Button>
-        <Button onclick={saveTopic} disabled={savingTopic}>{#if savingTopic}<Loader2 class="h-4 w-4 animate-spin" />{/if} Simpan</Button>
       </div>
     </Card>
   </div>

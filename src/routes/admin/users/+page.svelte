@@ -25,6 +25,7 @@
 
   let users = $state<SafeUser[]>([]);
   let classes = $state<{ id: string; name: string }[]>([]);
+  let allSubjects = $state<{ id: string; code: string; name: string }[]>([]);
   let loading = $state(true);
   let error = $state('');
 
@@ -32,6 +33,7 @@
   let editingId = $state<string | null>(null);
   let saving = $state(false);
   let formError = $state('');
+  let selectedSubjectIds = $state<string[]>([]);
   let f = $state({ name: '', username: '', password: '', role: 'STUDENT' as Role, religion: '' as Religion | '' });
 
   const roleTone = (r: Role) =>
@@ -41,12 +43,14 @@
     loading = true;
     error = '';
     try {
-      const [ur, cr] = await Promise.all([
+      const [ur, cr, sr] = await Promise.all([
         api.get<{ data: SafeUser[]; pagination: unknown }>('/users', { limit: 10000 }),
-        api.get('/classes')
+        api.get('/classes'),
+        api.get<{ data: { id: string; code: string; name: string }[] }>('/subjects', { limit: 10000 })
       ]);
       users = ((ur as any).data ?? []) as SafeUser[];
       classes = ((cr as any).data ?? cr ?? []) as any[];
+      allSubjects = ((sr as any).data ?? []) as { id: string; code: string; name: string }[];
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Gagal memuat user';
     } finally {
@@ -57,11 +61,12 @@
   function openCreate() {
     editingId = null;
     f = { name: '', username: '', password: '', role: 'STUDENT', religion: '' };
+    selectedSubjectIds = [];
     formError = '';
     showModal = true;
   }
 
-  function openEdit(u: SafeUser) {
+  async function openEdit(u: SafeUser) {
     editingId = u.id;
     f = {
       name: u.name,
@@ -70,8 +75,24 @@
       role: u.role,
       religion: (u.religion ?? '') as Religion | ''
     };
+    selectedSubjectIds = [];
     formError = '';
     showModal = true;
+    if (u.role === 'TEACHER') {
+      try {
+        const res = await api.get<{ id: string; code: string; name: string }[]>(`/users/${u.id}/subjects`);
+        const arr = Array.isArray(res) ? res : ((res as any).data ?? []);
+        selectedSubjectIds = arr.map((s: any) => s.id);
+      } catch {
+        selectedSubjectIds = [];
+      }
+    }
+  }
+
+  function toggleSubject(id: string) {
+    selectedSubjectIds = selectedSubjectIds.includes(id)
+      ? selectedSubjectIds.filter((x) => x !== id)
+      : [...selectedSubjectIds, id];
   }
 
   async function submit() {
@@ -88,8 +109,15 @@
     try {
       if (editingId) {
         await api.put(`/users/${editingId}`, payload);
+        if (f.role === 'TEACHER') {
+          await api.put(`/users/${editingId}/subjects`, { subjectIds: selectedSubjectIds });
+        }
       } else {
-        await api.post('/users', payload);
+        const created = await api.post<{ id: string }>('/users', payload);
+        const newId = (created as any).id ?? (created as any)?.data?.id;
+        if (f.role === 'TEACHER' && selectedSubjectIds.length && newId) {
+          await api.put(`/users/${newId}/subjects`, { subjectIds: selectedSubjectIds });
+        }
       }
       showModal = false;
       await load();
@@ -227,6 +255,23 @@
             </select>
           </label>
         </div>
+        {#if f.role === 'TEACHER'}
+          <div>
+            <span class="mb-1 block text-sm font-medium">Mata Pelajaran yang Diampu</span>
+            <div class="max-h-60 space-y-1 overflow-auto rounded-lg border border-border bg-card p-3">
+              {#if allSubjects.length === 0}
+                <p class="text-xs text-muted-foreground">Belum ada mata pelajaran.</p>
+              {:else}
+                {#each allSubjects as s (s.id)}
+                  <label class="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                    <input type="checkbox" checked={selectedSubjectIds.includes(s.id)} onchange={() => toggleSubject(s.id)} class="h-4 w-4 accent-primary" />
+                    <span class="font-mono text-xs text-muted-foreground">{s.code}</span> — {s.name}
+                  </label>
+                {/each}
+              {/if}
+            </div>
+          </div>
+        {/if}
       </div>
 
       <div class="mt-5 flex justify-end gap-2">

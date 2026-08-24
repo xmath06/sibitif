@@ -6,7 +6,8 @@
   import Card from '$components/ui/Card.svelte';
   import Badge from '$components/ui/Badge.svelte';
   import Button from '$components/ui/Button.svelte';
-  import { Loader2, Plus, Pencil, Trash2, X, ListTree } from 'lucide-svelte';
+  import { Loader2, Plus, Pencil, Trash2, X, ListTree, Share2 } from 'lucide-svelte';
+  import { user } from '$lib/stores/session';
   import RichTextEditor from '$components/RichTextEditor.svelte';
   import ExcelImportButton from '$components/ExcelImportButton.svelte';
   import Html from '$components/Html.svelte';
@@ -16,7 +17,7 @@
   interface Topic { id: string; name: string; subjectId: string }
   interface Subject { id: string; name: string; topics: Topic[] }
   interface Opt { id?: string; optionText: string; scoreWeight?: string }
-  interface Question { id: string; questionText: string; questionType: QuestionType; minWordCount?: number | null; maxWordCount?: number | null; answerKey?: string | null; options: Opt[] }
+  interface Question { id: string; questionText: string; questionType: QuestionType; minWordCount?: number | null; maxWordCount?: number | null; answerKey?: string | null; options: Opt[]; createdByUserId?: string; isShared?: boolean; createdByUser?: { id: string; name: string } | null }
 
   const TYPES: QuestionType[] = ['MCQ', 'ESSAY', 'TRUE_FALSE', 'POLY_CHOICE', 'MULTI_SELECT', 'URAIAN_PENDEK'];
 
@@ -41,7 +42,7 @@
 
   let show = $state(false);
   let editing = $state<Question | null>(null);
-  let f = $state({ questionText: '', questionType: 'MCQ' as QuestionType, minWordCount: '', maxWordCount: '', answerKey: '', options: [{ optionText: '' }] as Opt[] });
+  let f = $state({ questionText: '', questionType: 'MCQ' as QuestionType, minWordCount: '', maxWordCount: '', answerKey: '', isShared: false, options: [{ optionText: '' }] as Opt[] });
   let saving = $state(false);
   let formErr = $state('');
 
@@ -63,12 +64,12 @@
 
   function openCreate() {
     editing = null;
-    f = { questionText: '', questionType: 'MCQ', minWordCount: '', maxWordCount: '', answerKey: '', options: [{ optionText: '', scoreWeight: '0' }] };
+    f = { questionText: '', questionType: 'MCQ', minWordCount: '', maxWordCount: '', answerKey: '', isShared: false, options: [{ optionText: '', scoreWeight: '0' }] };
     formErr = ''; show = true;
   }
   function openEdit(q: Question) {
     editing = q;
-    f = { questionText: q.questionText, questionType: q.questionType, minWordCount: String(q.minWordCount ?? ''), maxWordCount: String(q.maxWordCount ?? ''), answerKey: q.answerKey ?? '', options: q.options.length ? q.options.map((o) => ({ id: o.id, optionText: o.optionText, scoreWeight: String(o.scoreWeight ?? '0') })) : [{ optionText: '', scoreWeight: '0' }] };
+    f = { questionText: q.questionText, questionType: q.questionType, minWordCount: String(q.minWordCount ?? ''), maxWordCount: String(q.maxWordCount ?? ''), answerKey: q.answerKey ?? '', isShared: q.isShared ?? false, options: q.options.length ? q.options.map((o) => ({ id: o.id, optionText: o.optionText, scoreWeight: String(o.scoreWeight ?? '0') })) : [{ optionText: '', scoreWeight: '0' }] };
     formErr = ''; show = true;
   }
   function addOpt() { f.options = [...f.options, { optionText: '', scoreWeight: '0' }]; }
@@ -94,6 +95,7 @@
     if (f.maxWordCount !== '') body.maxWordCount = Number(f.maxWordCount);
     if (f.questionType !== 'ESSAY' && f.questionType !== 'URAIAN_PENDEK') body.options = f.options.filter((o) => !isBlankHtml(o.optionText)).map((o) => ({ optionText: o.optionText, scoreWeight: Number(o.scoreWeight ?? 0) }));
     if (f.questionType === 'URAIAN_PENDEK') body.answerKey = f.answerKey || null;
+    body.isShared = f.isShared;
     try {
       if (editing) await api.put(`/questions/${editing.id}`, body);
       else await api.post('/questions', body);
@@ -104,6 +106,15 @@
   async function del(q: Question) {
     if (!confirm('Hapus soal ini?')) return;
     await api.del(`/questions/${q.id}`); await loadQuestions();
+  }
+  async function toggleShare(q: Question) {
+    const next = !q.isShared;
+    try {
+      await api.put(`/questions/${q.id}`, { isShared: next });
+      questions = questions.map((x) => (x.id === q.id ? { ...x, isShared: next } : x));
+    } catch (e) {
+      error = e instanceof ApiError ? e.message : 'Gagal mengubah status bagikan';
+    }
   }
   async function onImportQuestions(rows: any[]) {
     const r = await importQuestions(rows, subjects as any);
@@ -149,10 +160,15 @@
 {:else}
   <div class="space-y-3">
     {#each questions as q, i (q.id)}
+      {@const owned = q.createdByUserId === $user?.id}
       <Card class="p-4">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <p class="text-xs text-muted-foreground">Soal {i + 1} <Badge tone="primary" class="ml-1">{TL[q.questionType]}</Badge></p>
+            <p class="text-xs text-muted-foreground">Soal {i + 1}
+              <Badge tone="primary" class="ml-1">{TL[q.questionType]}</Badge>
+              {#if owned}<Badge tone="primary" class="ml-1">Milik Saya</Badge>
+              {:else if q.isShared}<Badge tone="default" class="ml-1">Dibagikan dari {q.createdByUser?.name ?? 'Guru lain'}</Badge>{/if}
+            </p>
             <Html html={q.questionText} class="mt-0.5 text-sm text-foreground" />
             {#if q.options.length}
               <p class="mt-1 text-xs text-muted-foreground">
@@ -168,9 +184,16 @@
           {#if q.questionType === 'URAIAN_PENDEK' && q.answerKey}
             <p class="mt-1 text-xs text-muted-foreground">Kunci: {q.answerKey}</p>
           {/if}
-          <div class="flex shrink-0 gap-1">
-            <Button variant="ghost" size="icon" onclick={() => openEdit(q)} title="Edit"><Pencil class="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" onclick={() => del(q)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
+          <div class="flex shrink-0 flex-col items-end gap-1">
+            {#if owned}
+              <div class="flex gap-1">
+                <Button variant="ghost" size="icon" onclick={() => openEdit(q)} title="Edit"><Pencil class="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" onclick={() => del(q)} title="Hapus"><Trash2 class="h-4 w-4 text-rose-600" /></Button>
+              </div>
+              <label class="mt-1 inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
+                <input type="checkbox" checked={q.isShared} onchange={() => toggleShare(q)} class="h-3.5 w-3.5 accent-primary" /> Bagikan
+              </label>
+            {/if}
           </div>
         </div>
       </Card>
@@ -255,6 +278,11 @@
           </div>
         {/if}
       </div>
+      <label class="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+        <input type="checkbox" bind:checked={f.isShared} class="h-4 w-4 accent-primary" />
+        <Share2 class="h-4 w-4" /> Izinkan guru lain yang mengampu mapel ini menggunakan soal ini (Bagikan)
+      </label>
+
       <div class="mt-5 flex justify-end gap-2">
         <Button variant="outline" onclick={() => (show = false)}>Batal</Button>
         <Button onclick={save} disabled={saving}>{#if saving}<Loader2 class="h-4 w-4 animate-spin" />{/if} Simpan</Button>
