@@ -36,6 +36,9 @@
   let loading = $state(true);
   let error = $state('');
 
+  const isAdmin = $derived($user?.role === 'ADMIN');
+  let teachers = $state<{ id: string; name: string }[]>([]);
+
   let show = $state(false);
   let editing = $state<Pkg | null>(null);
   let f = $state({ title: '', subjectId: '', hasTimer: true, durationMinutes: '', passScore: '', isRandomQuestions: true, isRandomOptions: false });
@@ -63,6 +66,10 @@
       ]);
       packages = ((pr as any).data ?? []) as Pkg[];
       subjects = ((sr as any).data ?? []) as Subject[];
+      if (isAdmin) {
+        const ur = await api.get('/users', { role: 'TEACHER', limit: 10000 });
+        teachers = ((ur as any).data ?? []).map((u: any) => ({ id: u.id, name: u.name }));
+      }
     } catch (e) { error = e instanceof ApiError ? e.message : 'Gagal memuat'; }
     finally { loading = false; }
   }
@@ -224,8 +231,8 @@
       manageSaving = false;
     }
   }
-  async function onImportPackages(rows: any[]) {
-    const r = await importPackages(rows, subjects as any);
+  async function onImportPackages(rows: any[], ownerUserId?: string | null) {
+    const r = await importPackages(rows, subjects as any, ownerUserId);
     await load();
     return r;
   }
@@ -244,6 +251,7 @@
   <ExcelImportButton label="Import Paket (Excel)" templateName="template_paket.xlsx"
     templateHeaders={['mapel','judul','durasi','pass','acak_soal','acak_opsi']}
     templateSample={{ mapel: 'MTK', judul: 'UTS Ganjil', durasi: 60, pass: 60, acak_soal: 'Y', acak_opsi: 'N' }}
+    ownerMode={isAdmin} teachers={teachers}
     onImport={onImportPackages} />
   <span class="text-xs text-muted-foreground">Kolom: mapel, judul, durasi (menit), pass (nilai lulus), acak_soal (Y/N), acak_opsi (Y/N).</span>
 </div>

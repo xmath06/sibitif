@@ -43,6 +43,8 @@
   let loading = $state(true);
   let error = $state('');
 
+  let teachers = $state<{ id: string; name: string }[]>([]);
+
   let show = $state(false);
   let editing = $state<Question | null>(null);
   let f = $state({ questionText: '', questionType: 'MCQ' as QuestionType, minWordCount: '', maxWordCount: '', answerKey: '', isShared: false, options: [{ optionText: '' }] as Opt[] });
@@ -52,6 +54,10 @@
   async function loadSubjects() {
     const res = await api.get<{ data: Subject[] }>('/subjects', { limit: 10000 });
     subjects = ((res as any).data ?? []) as Subject[];
+    if (isAdmin) {
+      const ur = await api.get('/users', { role: 'TEACHER', limit: 10000 });
+      teachers = ((ur as any).data ?? []).map((u: any) => ({ id: u.id, name: u.name }));
+    }
   }
   async function loadQuestions() {
     if (!topicId) { questions = []; loading = false; return; }
@@ -119,8 +125,8 @@
       error = e instanceof ApiError ? e.message : 'Gagal mengubah status bagikan';
     }
   }
-  async function onImportQuestions(rows: any[]) {
-    const r = await importQuestions(rows, subjects as any);
+  async function onImportQuestions(rows: any[], ownerUserId?: string | null) {
+    const r = await importQuestions(rows, subjects as any, ownerUserId);
     if (topicId) await loadQuestions();
     return r;
   }
@@ -140,6 +146,7 @@
   <ExcelImportButton label="Import Soal (Excel)" templateName="template_soal.xlsx"
     templateHeaders={['mapel','topik','tipe','soal','a','b','c','d','e','kunci','min_kata','max_kata']}
     templateSample={{ mapel: 'MTK', topik: 'Aljabar', tipe: 'MCQ', soal: 'Berapakah 2 + 2?', a: '3', b: '4', c: '5', d: '', e: '', kunci: 'b', min_kata: '', max_kata: '' }}
+    ownerMode={isAdmin} teachers={teachers}
     onImport={onImportQuestions} />
   <span class="text-xs text-muted-foreground">Kolom: mapel, topik, tipe, soal, a–e, kunci (huruf kunci, pisah koma untuk multi), min_kata, max_kata.</span>
 </div>

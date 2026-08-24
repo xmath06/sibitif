@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Download, Upload, AlertCircle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-svelte';
+  import { Download, Upload, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, X } from 'lucide-svelte';
   import Button from '$components/ui/Button.svelte';
   import { readExcelFile, downloadExcelTemplate } from '$lib/excel';
   import type { ExcelRow } from '$lib/excel';
@@ -10,19 +10,44 @@
     templateName = 'template.xlsx',
     templateHeaders = [] as string[],
     templateSample = {} as ExcelRow,
-    onImport = async (_rows: ExcelRow[]): Promise<ImportResult> => ({ ok: 0, failed: 0, errors: [] })
+    ownerMode = false,
+    teachers = [] as { id: string; name: string }[],
+    onImport = async (_rows: ExcelRow[], _owner?: string | null): Promise<ImportResult> => ({ ok: 0, failed: 0, errors: [] })
   }: {
     label?: string;
     templateName?: string;
     templateHeaders?: string[];
     templateSample?: ExcelRow;
-    onImport?: (rows: ExcelRow[]) => Promise<ImportResult>;
+    ownerMode?: boolean;
+    teachers?: { id: string; name: string }[];
+    onImport?: (rows: ExcelRow[], owner?: string | null) => Promise<ImportResult>;
   } = $props();
 
   let busy = $state(false);
   let result = $state<ImportResult | null>(null);
   let detailOpen = $state(true);
   let fileInput: HTMLInputElement;
+
+  let showOwner = $state(false);
+  let ownerChoice = $state<'admin' | 'teacher'>('admin');
+  let ownerTeacherId = $state<string>('');
+  let pendingOwner = $state<string | null | undefined>(undefined);
+
+  function openPicker() {
+    if (ownerMode) {
+      ownerChoice = 'admin';
+      ownerTeacherId = teachers[0]?.id ?? '';
+      showOwner = true;
+    } else {
+      fileInput?.click();
+    }
+  }
+
+  function confirmOwner() {
+    pendingOwner = ownerChoice === 'teacher' ? ownerTeacherId || null : null;
+    showOwner = false;
+    fileInput?.click();
+  }
 
   async function handleFile(e: Event) {
     const f = (e.currentTarget as HTMLInputElement).files?.[0];
@@ -32,7 +57,7 @@
     detailOpen = true;
     try {
       const rows = await readExcelFile(f);
-      result = await onImport(rows);
+      result = await onImport(rows, pendingOwner);
     } catch (err: any) {
       result = { ok: 0, failed: 1, errors: [err?.message || 'Gagal membaca file'] };
     } finally {
@@ -48,7 +73,7 @@
 
 <div class="space-y-2">
   <div class="flex flex-wrap items-center gap-2">
-    <Button variant="outline" size="sm" type="button" disabled={busy} title={label} onclick={() => fileInput?.click()}>
+    <Button variant="outline" size="sm" type="button" disabled={busy} title={label} onclick={openPicker}>
       {#if busy}<span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />{:else}<Upload class="h-4 w-4" />{/if}
       {label}
     </Button>
@@ -87,3 +112,43 @@
     </div>
   {/if}
 </div>
+
+{#if showOwner}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onclick={() => (showOwner = false)} role="presentation">
+    <div class="w-full max-w-md rounded-xl border border-border bg-card p-4 shadow-xl" onclick={(e) => e.stopPropagation()} role="presentation">
+      <div class="mb-3 flex items-center justify-between">
+        <h3 class="text-sm font-semibold">Import sebagai</h3>
+        <button type="button" class="text-muted-foreground hover:text-foreground" onclick={() => (showOwner = false)}>
+          <X class="h-4 w-4" />
+        </button>
+      </div>
+      <p class="mb-3 text-xs text-muted-foreground">
+        Pilih pemilik data hasil impor. Guru yang dipilih akan melihat paket/jadwal/soal ini sebagai miliknya.
+      </p>
+      <div class="space-y-2">
+        <label class="flex items-center gap-2 text-sm">
+          <input type="radio" bind:group={ownerChoice} value="admin" />
+          <span>Admin (saya)</span>
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="radio" bind:group={ownerChoice} value="teacher" />
+          <span>Guru tertentu</span>
+        </label>
+        {#if ownerChoice === 'teacher'}
+          <select bind:value={ownerTeacherId} class="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+            {#if teachers.length === 0}
+              <option value="">— tidak ada guru —</option>
+            {/if}
+            {#each teachers as t (t.id)}
+              <option value={t.id}>{t.name}</option>
+            {/each}
+          </select>
+        {/if}
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" size="sm" type="button" onclick={() => (showOwner = false)}>Batal</Button>
+        <Button size="sm" type="button" disabled={ownerChoice === 'teacher' && !ownerTeacherId} onclick={confirmOwner}>Lanjut</Button>
+      </div>
+    </div>
+  </div>
+{/if}

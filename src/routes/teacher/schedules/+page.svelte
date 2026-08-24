@@ -18,6 +18,9 @@
   let loading = $state(true);
   let error = $state('');
 
+  const isAdmin = $derived($user?.role === 'ADMIN');
+  let teachers = $state<{ id: string; name: string }[]>([]);
+
   async function load() {
     loading = true; error = '';
     try {
@@ -27,11 +30,15 @@
       ]);
       schedules = ((sr as any).data ?? []) as Sched[];
       packages = ((pr as any).data ?? []) as any[];
+      if (isAdmin) {
+        const ur = await api.get('/users', { role: 'TEACHER', limit: 10000 });
+        teachers = ((ur as any).data ?? []).map((u: any) => ({ id: u.id, name: u.name }));
+      }
     } catch (e) { error = e instanceof ApiError ? e.message : 'Gagal memuat'; }
     finally { loading = false; }
   }
-  async function onImportSchedules(rows: any[]) {
-    const r = await importSchedules(rows, packages);
+  async function onImportSchedules(rows: any[], ownerUserId?: string | null) {
+    const r = await importSchedules(rows, packages, ownerUserId);
     await load();
     return r;
   }
@@ -68,6 +75,7 @@
   <ExcelImportButton label="Import Jadwal (Excel)" templateName="template_jadwal.xlsx"
     templateHeaders={['paket','judul','mulai','kategori','kode_akses','tampil_hasil','target','agama']}
     templateSample={{ paket: 'UTS Ganjil', judul: 'UTS Matematika', mulai: '2026-08-20 08:00', kategori: 'EXAM', kode_akses: '', tampil_hasil: 'Y', target: 'ALL_STUDENTS', agama: '' }}
+    ownerMode={isAdmin} teachers={teachers}
     onImport={onImportSchedules} />
   <span class="text-xs text-muted-foreground">Kolom: paket (judul), judul, mulai (YYYY-MM-DD HH:MM), kategori (EXAM/ASSIGNMENT), kode_akses, tampil_hasil (Y/N), target, agama.</span>
 </div>

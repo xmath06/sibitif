@@ -31,7 +31,7 @@ type SubjectLike = { id: string; code: string; name: string; topics?: { id: stri
 type PackageLike = { id: string; title: string; subjectId?: string; subject?: { name?: string } };
 
 /** Import soal dari Excel. Kolom: mapel, topik, tipe, soal, a..e, kunci, min_kata, max_kata */
-export async function importQuestions(rows: ExcelRow[], subjects: SubjectLike[]): Promise<ImportResult> {
+export async function importQuestions(rows: ExcelRow[], subjects: SubjectLike[], ownerUserId?: string | null): Promise<ImportResult> {
   const res: ImportResult = { ok: 0, failed: 0, errors: [] };
   const byKey = new Map<string, SubjectLike>();
   for (const s of subjects) {
@@ -103,6 +103,7 @@ export async function importQuestions(rows: ExcelRow[], subjects: SubjectLike[])
       } else {
         payload.options = options;
       }
+      if (ownerUserId) payload.createdByUserId = ownerUserId;
       await api.post('/questions', payload);
       res.ok++;
     } catch (e: any) {
@@ -114,7 +115,7 @@ export async function importQuestions(rows: ExcelRow[], subjects: SubjectLike[])
 }
 
 /** Import paket dari Excel. Kolom: mapel, judul, durasi, pass, acak_soal, acak_opsi */
-export async function importPackages(rows: ExcelRow[], subjects: SubjectLike[]): Promise<ImportResult> {
+export async function importPackages(rows: ExcelRow[], subjects: SubjectLike[], ownerUserId?: string | null): Promise<ImportResult> {
   const res: ImportResult = { ok: 0, failed: 0, errors: [] };
   const byKey = new Map<string, SubjectLike>();
   for (const s of subjects) {
@@ -145,7 +146,8 @@ export async function importPackages(rows: ExcelRow[], subjects: SubjectLike[]):
         durationMinutes: r.durasi ? Number(r.durasi) || null : null,
         passScore: r.pass ? Number(r.pass) || null : null,
         isRandomQuestions: yn(r.acak_soal),
-        isRandomOptions: yn(r.acak_opsi)
+        isRandomOptions: yn(r.acak_opsi),
+        ...(ownerUserId ? { createdByUserId: ownerUserId } : {})
       };
       await api.post('/packages', payload);
       res.ok++;
@@ -158,7 +160,7 @@ export async function importPackages(rows: ExcelRow[], subjects: SubjectLike[]):
 }
 
 /** Import jadwal dari Excel. Kolom: paket, judul, mulai, kategori, kode_akses, tampil_hasil, target, agama */
-export async function importSchedules(rows: ExcelRow[], packages: PackageLike[]): Promise<ImportResult> {
+export async function importSchedules(rows: ExcelRow[], packages: PackageLike[], ownerUserId?: string | null): Promise<ImportResult> {
   const res: ImportResult = { ok: 0, failed: 0, errors: [] };
   const byTitle = new Map<string, PackageLike>();
   for (const p of packages) byTitle.set(p.title.toLowerCase(), p);
@@ -202,7 +204,8 @@ export async function importSchedules(rows: ExcelRow[], packages: PackageLike[])
         accessCode: r.kode_akses ? String(r.kode_akses) : null,
         showResultImmediately: yn(r.tampil_hasil),
         targetType: ['ALL_STUDENTS', 'BY_CLASS', 'BY_GRADE', 'SPECIFIC_STUDENTS'].includes(target) ? (target as any) : 'ALL_STUDENTS',
-        targetReligion: r.agama ? String(r.agama).toUpperCase() : null
+        targetReligion: r.agama ? String(r.agama).toUpperCase() : null,
+        ...(ownerUserId ? { createdByUserId: ownerUserId } : {})
       };
       await api.post('/schedules', payload);
       res.ok++;
