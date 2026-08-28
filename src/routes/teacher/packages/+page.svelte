@@ -299,7 +299,7 @@
 {/if}
 
 {#if show}
-  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onclick={(e) => e.target === e.currentTarget && (show = false)} onkeydown={(e) => e.key === 'Escape' && (show = false)}>
+  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.target === e.currentTarget && (show = false)} onkeydown={(e) => e.key === 'Escape' && (show = false)}>
     <Card class="w-full max-w-md p-6">
       <div class="mb-4 flex items-center justify-between">
         <h3 class="text-base font-semibold text-foreground">{editing ? 'Edit' : 'Tambah'} Paket</h3>
@@ -325,12 +325,13 @@
         <Button variant="outline" onclick={() => (show = false)}>Batal</Button>
         <Button onclick={save} disabled={saving}>{#if saving}<Loader2 class="h-4 w-4 animate-spin" />{/if} Simpan</Button>
       </div>
+      </div>
     </Card>
   </div>
 {/if}
 
 {#if manageShow}
-  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onclick={(e) => e.target === e.currentTarget && (manageShow = false)} onkeydown={(e) => e.key === 'Escape' && (manageShow = false)}>
+  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.target === e.currentTarget && (manageShow = false)} onkeydown={(e) => e.key === 'Escape' && (manageShow = false)}>
     <Card class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden">
       <div class="flex items-center justify-between border-b border-border px-5 py-3">
         <h3 class="text-base font-semibold text-foreground">Kelola Soal — {managePkg?.title}</h3>

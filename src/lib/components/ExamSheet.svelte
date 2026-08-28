@@ -23,7 +23,7 @@
   let submitting = $state(false);
   let submitError = $state('');
   let exam = $state<StartExamResponse | null>(null);
-  let examRoot: HTMLElement;
+  let examRoot = $state<HTMLElement | undefined>(undefined);
   let ac: AntiCheat | null = null;
   let violations = $state(0);
   let lastReason = $state('');
@@ -241,7 +241,7 @@
     // Anti-cheat ringan: pasang setelah DOM ujian termuat.
     await tick();
     ac = new AntiCheat({
-      container: examRoot,
+      container: examRoot!,
       maxViolations: ANTI_CHEAT_MAX,
       onViolation: (count, reason) => {
         violations = count;

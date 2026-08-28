@@ -225,7 +225,7 @@
 {/if}
 
 {#if showSubj}
-  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onclick={(e) => e.target === e.currentTarget && (showSubj = false)} onkeydown={(e) => e.key === 'Escape' && (showSubj = false)}>
+  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.target === e.currentTarget && (showSubj = false)} onkeydown={(e) => e.key === 'Escape' && (showSubj = false)}>
     <Card class="w-full max-w-md p-6">
       <div class="mb-4 flex items-center justify-between">
         <h3 class="text-base font-semibold text-foreground">{editingSubj ? 'Edit' : 'Tambah'} Mata Pelajaran</h3>
@@ -245,7 +245,7 @@
 {/if}
 
 {#if showTopic}
-  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onclick={(e) => e.target === e.currentTarget && (showTopic = false)} onkeydown={(e) => e.key === 'Escape' && (showTopic = false)}>
+  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.target === e.currentTarget && (showTopic = false)} onkeydown={(e) => e.key === 'Escape' && (showTopic = false)}>
     <Card class="w-full max-w-md p-6">
       <div class="mb-4 flex items-center justify-between">
         <h3 class="text-base font-semibold text-foreground">{editingTopic ? 'Edit' : 'Tambah'} Topik</h3>

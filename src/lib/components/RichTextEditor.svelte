@@ -245,7 +245,7 @@
   let el: HTMLDivElement;
   let editor = $state<Editor | null>(null);
   let uploading = $state(false);
-  let imgInput: HTMLInputElement;
+  let imgInput = $state<HTMLInputElement>();
   let mathOpen = $state(false);
   let mathField = $state<any>(null);
   let graphOpen = $state(false);
@@ -518,7 +518,7 @@
     >
       <div class="w-full max-w-lg rounded-2xl bg-card p-5 shadow-xl animate-fade-in">
         <h3 class="mb-3 text-sm font-semibold text-foreground">Editor Persamaan Matematika</h3>
-        <math-field
+        <math-field role="textbox" tabindex="-1"
           bind:this={mathField}
           onkeydown={(e: KeyboardEvent) => {
             if (e.key === 'Enter') {

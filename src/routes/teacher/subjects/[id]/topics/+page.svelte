@@ -125,7 +125,7 @@
 {/if}
 
 {#if showModal}
-  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onclick={(e) => e.target === e.currentTarget && (showModal = false)} onkeydown={(e) => e.key === 'Escape' && (showModal = false)}>
+  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.target === e.currentTarget && (showModal = false)} onkeydown={(e) => e.key === 'Escape' && (showModal = false)}>
     <Card class="w-full max-w-md p-6">
       <div class="mb-4 flex items-center justify-between">
         <h3 class="text-base font-semibold text-foreground">{editingTopic ? 'Edit' : 'Tambah'} Bab/Topik</h3>

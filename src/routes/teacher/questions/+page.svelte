@@ -219,7 +219,7 @@
 {/if}
 
 {#if show}
-  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onclick={(e) => e.target === e.currentTarget && (show = false)} onkeydown={(e) => e.key === 'Escape' && (show = false)}>
+  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.target === e.currentTarget && (show = false)} onkeydown={(e) => e.key === 'Escape' && (show = false)}>
     <Card class="max-h-[90vh] w-full max-w-lg overflow-y-auto p-6">
       <div class="mb-4 flex items-center justify-between">
         <h3 class="text-base font-semibold text-foreground">{editing ? 'Edit' : 'Tambah'} Soal</h3>

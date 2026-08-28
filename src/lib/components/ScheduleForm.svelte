@@ -11,8 +11,6 @@
   let {
     id,
     initial,
-    classes: initialClasses = [],
-    students: initialStudents = []
   }: {
     id?: string;
     initial?: any;
@@ -23,8 +21,8 @@
   // Diisi dari API di onMount (prop hanya default kosong). Pakai $state agar
   // pembaruan hasil fetch mereaktifkan template (targeting kelas & siswa).
   // (Mendestruktur prop lalu meng-assign ulang tidak reaktif di Svelte 5.)
-  let classes = $state<{ id: string; name: string; gradeLevel: number }[]>(initialClasses);
-  let students = $state<{ id: string; name: string; className?: string }[]>(initialStudents);
+  let classes = $state<{ id: string; name: string; gradeLevel: number }[]>([]);
+  let students = $state<{ id: string; name: string; className?: string }[]>([]);
 
   let packages = $state<{ id: string; title: string; subject?: { religion?: string | null } }[]>([]);
   let loading = $state(false);

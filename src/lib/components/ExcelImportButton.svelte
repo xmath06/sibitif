@@ -74,7 +74,7 @@
 <div class="space-y-2">
   <div class="flex flex-wrap items-center gap-2">
     <Button variant="outline" size="sm" type="button" disabled={busy} title={label} onclick={openPicker}>
-      {#if busy}<span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />{:else}<Upload class="h-4 w-4" />{/if}
+      {#if busy}<span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>{:else}<Upload class="h-4 w-4" />{/if}
       {label}
     </Button>
     <input bind:this={fileInput} class="hidden" type="file" accept=".xlsx,.xls,.csv" onchange={handleFile} />
