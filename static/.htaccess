@@ -1,0 +1,24 @@
+# .htaccess — Deploy SvelteKit SPA (adapter-static) ke Apache
+# Butuh mod_rewrite, mod_proxy, mod_proxy_http, dan di httpd.conf:
+#   AllowOverride All
+# Web frontend memanggil /api/v1 secara same-origin, jadi kita proxy /api
+# ke backend CBT agar tidak butuh CORS di sisi web.
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # 1) Proxy semua /api/* ke backend (ganti host:port di bawah)
+  RewriteCond %{REQUEST_URI} ^/api/
+  RewriteRule ^api/(.*)$ http://127.0.0.1:3000/api/$1 [P,L]
+
+  # 2) SPA fallback: route yang tidak cocok file/folder -> index.html
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^(.*)$ /index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|mjs|css|woff2?|png|jpe?g|gif|svg|ico|json|wasm)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>

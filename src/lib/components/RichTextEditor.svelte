@@ -282,8 +282,18 @@
     });
   }
 
+  function isSupportedImage(file?: File | null): boolean {
+    if (!file) return false;
+    if (file.type?.startsWith('image/')) return true;
+
+    const name = file.name.toLowerCase();
+    return ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', '.bmp', '.ico', '.avif', '.heic', '.heif'].some((ext) =>
+      name.endsWith(ext)
+    );
+  }
+
   async function insertImageFromFile(file: File) {
-    if (!file.type.startsWith('image/')) return;
+    if (!isSupportedImage(file)) return;
     uploading = true;
     try {
       const res = await api.upload<{ success: boolean; data: { url: string } }>('/upload', file);
@@ -304,10 +314,10 @@
     const items = e.clipboardData?.items;
     if (!items) return;
     for (const it of items) {
-      if (it.type.startsWith('image/')) {
+      const file = it.getAsFile();
+      if (file && isSupportedImage(file)) {
         e.preventDefault();
-        const f = it.getAsFile();
-        if (f) insertImageFromFile(f);
+        insertImageFromFile(file);
         return;
       }
     }
@@ -316,7 +326,7 @@
   function onDrop(e: DragEvent) {
     if (compact) return;
     const f = e.dataTransfer?.files?.[0];
-    if (f && f.type.startsWith('image/')) {
+    if (f && isSupportedImage(f)) {
       e.preventDefault();
       insertImageFromFile(f);
     }
@@ -455,7 +465,7 @@
         bind:this={imgInput}
         class="hidden"
         type="file"
-        accept="image/*"
+        accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.svg,.bmp,.avif,.heic,.heif,.ico"
         onchange={(e) => {
           const f = (e.currentTarget as HTMLInputElement).files?.[0];
           if (f) insertImageFromFile(f);
