@@ -179,7 +179,7 @@
         return;
       }
       await api.post('/schedules', payload);
-      success = true;
+      location.href = '/teacher/schedules';
     } catch (e) {
       errorMsg = e instanceof ApiError ? e.message : 'Gagal menyimpan jadwal';
     } finally {

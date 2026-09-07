@@ -6,7 +6,7 @@
   import Card from '$components/ui/Card.svelte';
   import Badge from '$components/ui/Badge.svelte';
   import Button from '$components/ui/Button.svelte';
-  import { Loader2, Plus, Pencil, Trash2, X, ListTree, Share2 } from 'lucide-svelte';
+  import { Loader2, Plus, Pencil, Trash2, X, ListTree, Share2, ArrowLeft } from 'lucide-svelte';
   import { user } from '$lib/stores/session';
   import RichTextEditor from '$components/RichTextEditor.svelte';
   import ExcelImportButton from '$components/ExcelImportButton.svelte';
@@ -135,9 +135,16 @@
 </script>
 
 <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-  <div>
-    <h1 class="text-xl font-bold text-foreground">Bank Soal — Soal</h1>
-    <p class="text-sm text-muted-foreground">Pilih topik, lalu kelola soal & opsi jawaban.</p>
+  <div class="flex items-center gap-2">
+    {#if topicId}
+      <button onclick={() => { topicId = ''; questions = []; }} class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground" title="Kembali ke daftar topik">
+        <ArrowLeft class="h-5 w-5" />
+      </button>
+    {/if}
+    <div>
+      <h1 class="text-xl font-bold text-foreground">Bank Soal — Soal</h1>
+      <p class="text-sm text-muted-foreground">Pilih topik, lalu kelola soal & opsi jawaban.</p>
+    </div>
   </div>
   <Button onclick={openCreate} disabled={!topicId}><Plus class="h-4 w-4" /> Soal</Button>
 </div>
@@ -290,7 +297,9 @@
                 ? 'Centang "Benar" & isi bobot (1 = benar, 0 = salah, 0.5 = parsial). Skor = jumlah bobot opsi terpilih (tanpa pengali).'
                 : f.questionType === 'MULTI_SELECT'
                   ? 'Boleh memilih lebih dari satu; centang "Kunci" pada semua opsi benar. Skor tetap 1 (tanpa pengali) jika semua kunci tepat, else 0.'
-                  : 'Centang "Kunci" pada opsi benar. Skor = pengali paket jika tepat, else 0.'}
+                  : f.questionType === 'TRUE_FALSE'
+                    ? 'Isi teks pernyataan di tiap opsi. Centang "Kunci" pada pernyataan yang benar (True). Siswa akan menandai tiap pernyataan sebagai Benar/Salah.'
+                    : 'Centang "Kunci" pada opsi benar. Skor = pengali paket jika tepat, else 0.'}
             </p>
           </div>
         {/if}

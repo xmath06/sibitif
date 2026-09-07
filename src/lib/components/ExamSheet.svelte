@@ -14,7 +14,7 @@
   import { AntiCheat } from '$lib/antiCheat';
 
   // Anti-cheat ringan: batas pelanggaran sebelum auto-submit (0 = hanya peringatan).
-  const ANTI_CHEAT_MAX = 0;
+  const ANTI_CHEAT_MAX = 3;
 
   let { studentExamId }: { studentExamId: string } = $props();
 
@@ -34,6 +34,8 @@
 
   // answers keyed by questionId
   let answers = $state<Record<string, { selectedOptionId?: string; selectedOptionIds: string[]; essayAnswer?: string; isFlagged: boolean }>>({});
+  // TRUE_FALSE: track explicitly answered options (questionId → optionId → true/false)
+  let tfAnswered = $state<Record<string, Record<string, boolean>>>({});
 
   // timer
   let now = $state(Date.now());
@@ -58,7 +60,7 @@
       const answered =
         q.questionType === 'ESSAY' || q.questionType === 'URAIAN_PENDEK'
           ? Boolean(a?.essayAnswer && a.essayAnswer.replace(/<[^>]*>/g, '').trim().length > 0)
-          : q.questionType === 'MULTI_SELECT'
+          : q.questionType === 'MULTI_SELECT' || q.questionType === 'TRUE_FALSE'
             ? (a?.selectedOptionIds.length ?? 0) > 0
             : Boolean(a?.selectedOptionId);
       return { id: q.id, index: i, answered, flagged: Boolean(a?.isFlagged) };
@@ -67,13 +69,28 @@
 
   function ensureAnswer(q: Question) {
     if (!answers[q.id]) {
-      const saved = q.savedAnswers?.[0];
+      const saved = q.savedAnswers ?? [];
+      const isMulti = q.questionType === 'MULTI_SELECT' || q.questionType === 'TRUE_FALSE';
+      const savedIds = isMulti
+        ? saved.map((s) => s.selectedOptionId).filter((id): id is string => Boolean(id))
+        : saved[0]?.selectedOptionId
+          ? [saved[0].selectedOptionId]
+          : [];
       answers[q.id] = {
-        selectedOptionId: saved?.selectedOptionId ?? undefined,
-        selectedOptionIds: saved?.selectedOptionId ? [saved.selectedOptionId] : [],
-        essayAnswer: saved?.essayAnswer ?? '',
-        isFlagged: saved?.isFlagged ?? false
+        selectedOptionId: isMulti ? undefined : (saved[0]?.selectedOptionId ?? undefined),
+        selectedOptionIds: savedIds,
+        essayAnswer: saved[0]?.essayAnswer ?? '',
+        isFlagged: saved[0]?.isFlagged ?? false
       };
+      // Restore tfAnswered from saved answers for TRUE_FALSE
+      if (q.questionType === 'TRUE_FALSE' && !tfAnswered[q.id] && q.options) {
+        const tfMap: Record<string, boolean> = {};
+        for (const opt of q.options) {
+          if (savedIds.includes(opt.id)) tfMap[opt.id] = true;
+          else if (saved.length > 0) tfMap[opt.id] = false;
+        }
+        if (Object.keys(tfMap).length > 0) tfAnswered = { ...tfAnswered, [q.id]: tfMap };
+      }
     }
     return answers[q.id];
   }
@@ -92,7 +109,7 @@
 
   function toggleOption(q: Question, optId: string) {
     const a = ensureAnswer(q);
-    if (q.questionType === 'MULTI_SELECT') {
+    if (q.questionType === 'MULTI_SELECT' || q.questionType === 'TRUE_FALSE') {
       a.selectedOptionIds = a.selectedOptionIds.includes(optId)
         ? a.selectedOptionIds.filter((x) => x !== optId)
         : [...a.selectedOptionIds, optId];
@@ -101,6 +118,22 @@
       a.selectedOptionId = optId;
       a.selectedOptionIds = [];
     }
+    scheduleSave();
+  }
+
+  function toggleTrueFalse(q: Question, optId: string, isTrue: boolean) {
+    const a = ensureAnswer(q);
+    if (isTrue) {
+      if (!a.selectedOptionIds.includes(optId)) {
+        a.selectedOptionIds = [...a.selectedOptionIds, optId];
+      }
+    } else {
+      a.selectedOptionIds = a.selectedOptionIds.filter((x) => x !== optId);
+    }
+    a.selectedOptionId = undefined;
+    // Track explicit answer
+    if (!tfAnswered[q.id]) tfAnswered = { ...tfAnswered, [q.id]: {} };
+    tfAnswered = { ...tfAnswered, [q.id]: { ...tfAnswered[q.id], [optId]: isTrue } };
     scheduleSave();
   }
 
@@ -129,8 +162,8 @@
         const a = answers[q.id] ?? {};
         return {
           questionId: q.id,
-          selectedOptionId: q.questionType === 'MULTI_SELECT' ? undefined : a.selectedOptionId,
-          selectedOptionIds: q.questionType === 'MULTI_SELECT' ? a.selectedOptionIds : undefined,
+          selectedOptionId: q.questionType === 'MULTI_SELECT' || q.questionType === 'TRUE_FALSE' ? undefined : a.selectedOptionId,
+          selectedOptionIds: q.questionType === 'MULTI_SELECT' || q.questionType === 'TRUE_FALSE' ? a.selectedOptionIds : undefined,
           essayAnswer: q.questionType === 'ESSAY' || q.questionType === 'URAIAN_PENDEK' ? a.essayAnswer : undefined,
           isFlagged: a.isFlagged
         };
@@ -169,7 +202,7 @@
         } else if (q.maxWordCount != null && words > q.maxWordCount) {
           problems.push(`${label}: esai ${words} kata, maksimal ${q.maxWordCount}`);
         }
-      } else if (q.questionType === 'MULTI_SELECT') {
+      } else if (q.questionType === 'MULTI_SELECT' || q.questionType === 'TRUE_FALSE') {
         if ((a?.selectedOptionIds.length ?? 0) === 0) unanswered++;
       } else {
         if (!a?.selectedOptionId) unanswered++;
@@ -243,6 +276,7 @@
     ac = new AntiCheat({
       container: examRoot!,
       maxViolations: ANTI_CHEAT_MAX,
+      requireFullscreen: true,
       onViolation: (count, reason) => {
         violations = count;
         lastReason = reason;
@@ -266,7 +300,7 @@
           exam && (exam.timer.deadlineAt = t.deadlineAt);
         }
         online = true;
-        if (t.expired && !expired) submit();
+        if (t.expired && !expired) forceSubmit();
       } catch {
         online = false;
       }
@@ -385,6 +419,48 @@
                     Batas kata: {currentQuestion.minWordCount ?? 0}–{currentQuestion.maxWordCount ?? '∞'}
                   </p>
                 {/if}
+              </div>
+            {:else if currentQuestion.questionType === 'TRUE_FALSE'}
+              <div class="mt-4 overflow-x-auto">
+                <table class="w-full border-collapse text-sm">
+                  <thead>
+                    <tr class="border-b border-border">
+                      <th class="w-10 px-3 py-2 text-center font-semibold text-muted-foreground">No</th>
+                      <th class="px-3 py-2 text-left font-semibold text-muted-foreground">Pernyataan</th>
+                      <th class="w-20 px-3 py-2 text-center font-semibold text-muted-foreground">Benar</th>
+                      <th class="w-20 px-3 py-2 text-center font-semibold text-muted-foreground">Salah</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each currentQuestion.options as opt, idx (opt.id)}
+                      {@const tfVal = tfAnswered[currentQuestion.id]?.[opt.id]}
+                      <tr class={cn('border-b border-border transition-colors', tfVal === true ? 'bg-indigo-50/60' : tfVal === false ? '' : '', tfVal != null ? '' : 'hover:bg-accent')}>
+                        <td class="px-3 py-2.5 text-center text-muted-foreground">{idx + 1}</td>
+                        <td class="px-3 py-2.5">
+                          <span class="prose prose-sm max-w-none text-[15px] leading-relaxed"><Html html={opt.optionText} tag="span" /></span>
+                        </td>
+                        <td class="px-3 py-2.5 text-center">
+                          <input
+                            type="radio"
+                            name={`tf-${currentQuestion.id}-${opt.id}`}
+                            class="accent-[hsl(var(--primary))]"
+                            checked={tfVal === true}
+                            onchange={() => toggleTrueFalse(currentQuestion, opt.id, true)}
+                          />
+                        </td>
+                        <td class="px-3 py-2.5 text-center">
+                          <input
+                            type="radio"
+                            name={`tf-${currentQuestion.id}-${opt.id}`}
+                            class="accent-[hsl(var(--primary))]"
+                            checked={tfVal === false}
+                            onchange={() => toggleTrueFalse(currentQuestion, opt.id, false)}
+                          />
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
               </div>
             {:else}
               <div class="mt-4 space-y-2.5">

@@ -331,99 +331,101 @@
 {/if}
 
 {#if manageShow}
-  <div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.target === e.currentTarget && (manageShow = false)} onkeydown={(e) => e.key === 'Escape' && (manageShow = false)}>
-    <Card class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden">
-      <div class="flex items-center justify-between border-b border-border px-5 py-3">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.target === e.currentTarget && (manageShow = false)} onkeydown={(e) => e.key === 'Escape' && (manageShow = false)}>
+    <Card class="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden">
+      <div class="flex shrink-0 items-center justify-between border-b border-border px-5 py-3">
         <h3 class="text-base font-semibold text-foreground">Kelola Soal — {managePkg?.title}</h3>
         <button onclick={() => (manageShow = false)} class="text-muted-foreground hover:text-foreground"><X class="h-5 w-5" /></button>
       </div>
       {#if manageErr}<p class="mx-5 mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{manageErr}</p>{/if}
-      <div class="grid gap-3 border-b border-border px-5 py-3">
-        <label class="block"><span class="mb-1 block text-sm font-medium">Mapel</span>
-          <select bind:value={manageSubjectId} onchange={() => applyManageSubject(manageSubjectId, true)} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
-            {#each subjects as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
-          </select>
-        </label>
-        <div>
-          <span class="mb-1.5 block text-sm font-medium">Topik <span class="font-normal text-muted-foreground">(boleh lebih dari satu)</span></span>
-          {#if manageTopics.length === 0}
-            <p class="text-sm text-muted-foreground">Tidak ada topik untuk mapel ini.</p>
-          {:else}
-            <div class="flex flex-wrap gap-2">
-              {#each manageTopics as t (t.id)}
-                <button type="button" onclick={() => toggleTopic(t.id)}
-                  class={manageSelectedTopics[t.id]
-                    ? 'rounded-full border border-primary bg-primary px-3 py-1 text-sm font-medium text-primary-foreground'
-                    : 'rounded-full border border-border bg-card px-3 py-1 text-sm text-foreground hover:bg-accent'}>
-                  {t.name}
-                  {#if manageSelectedTopics[t.id]}
-                    <span class="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/25 px-1.5 text-xs font-bold">{selectedCountInTopic(t.id)}</span>
-                  {/if}
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </div>
-      <div class="flex flex-wrap items-center justify-between gap-1 px-5 py-2 text-sm text-muted-foreground">
-        <span>Pilih soal per topik</span>
-        <span class="font-medium text-foreground">
-          {Object.keys(manageSelected).length} soal dipilih
-          {#if Object.keys(manageSelectedTypes).length}
-            <span class="font-normal text-muted-foreground">({Object.entries(manageSelectedTypes).map(([t, n]) => `${n} ${TL[t as QuestionType]}`).join(' · ')})</span>
-          {/if}
-        </span>
-      </div>
-      <div class="border-b border-border px-5 py-3">
-        <p class="mb-1 text-sm font-medium">Bobot Skor per Tipe (pengali)</p>
-        <p class="mb-2 text-xs text-muted-foreground">Hanya tipe terpilih yang punya pengali. MCQ &amp; Pilihan Ganda (Banyak Jawaban) tidak punya pengali.</p>
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {#each PENGALI_TYPES as t}
-            {#if manageSelectedTypes[t]}
-              <label class="block">
-                <span class="mb-1 block text-xs text-muted-foreground">{TL[t]} ({manageSelectedTypes[t]})</span>
-                <input type="number" min="0.5" step="0.5" bind:value={manageTypeWeights[t]} class="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
-              </label>
-            {/if}
-          {/each}
-        </div>
-      </div>
-      <div class="min-h-[220px] flex-1 space-y-2 overflow-y-auto px-5 py-3">
-        {#if manageLoading}
-          <div class="grid place-items-center py-10 text-muted-foreground"><Loader2 class="h-5 w-5 animate-spin" /></div>
-        {:else if Object.keys(manageSelectedTopics).length === 0}
-          <p class="py-8 text-center text-sm text-muted-foreground">Pilih minimal satu topik untuk menampilkan soal.</p>
-        {:else}
-          {#each Object.keys(manageSelectedTopics) as tid (tid)}
-            <div class="flex items-center justify-between rounded-lg bg-secondary/60 px-3 py-1.5">
-              <span class="text-sm font-semibold text-foreground">
-                {manageTopics.find((t) => t.id === tid)?.name ?? 'Topik'}
-                <span class="ml-1 font-normal text-muted-foreground">({(manageQuestionsByTopic[tid] ?? []).length} soal)</span>
-              </span>
-              <label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-                <input type="checkbox" checked={topicAllChecked(tid)} onchange={() => toggleTopicAll(tid)} class="accent-[hsl(var(--primary))]" />
-                Semua
-              </label>
-            </div>
-            {#if !manageQuestionsByTopic[tid]}
-              <p class="px-1 text-sm text-muted-foreground">Memuat…</p>
-            {:else if manageQuestionsByTopic[tid].length === 0}
-              <p class="px-1 text-sm text-muted-foreground">Tidak ada soal di topik ini.</p>
+      <div class="flex flex-1 flex-col overflow-hidden">
+        <div class="shrink-0 space-y-3 border-b border-border px-5 py-3">
+          <label class="block"><span class="mb-1 block text-sm font-medium">Mapel</span>
+            <select bind:value={manageSubjectId} onchange={() => applyManageSubject(manageSubjectId, true)} class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
+              {#each subjects as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
+            </select>
+          </label>
+          <div>
+            <span class="mb-1.5 block text-sm font-medium">Topik <span class="font-normal text-muted-foreground">(klik untuk aktifkan/nonaktifkan)</span></span>
+            {#if manageTopics.length === 0}
+              <p class="text-sm text-muted-foreground">Tidak ada topik untuk mapel ini.</p>
             {:else}
-              {#each manageQuestionsByTopic[tid] as q (q.id)}
-                <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 hover:bg-accent">
-                  <input type="checkbox" checked={!!manageSelected[q.id]} onchange={() => toggleSelect(q.id)} class="mt-1 accent-[hsl(var(--primary))]" />
-                  <span class="min-w-0 flex-1">
-                    <span class="mb-1 inline-block rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground">{TL[q.questionType as QuestionType]}</span>
-                    <Html html={q.questionText} class="text-sm text-foreground" />
-                  </span>
-                </label>
-              {/each}
+              <div class="flex max-h-28 flex-wrap content-start gap-2 overflow-y-auto">
+                {#each manageTopics as t (t.id)}
+                  <button type="button" onclick={() => toggleTopic(t.id)}
+                    class={manageSelectedTopics[t.id]
+                      ? 'shrink-0 rounded-full border border-primary bg-primary px-3 py-1 text-sm font-medium text-primary-foreground'
+                      : 'shrink-0 rounded-full border border-border bg-card px-3 py-1 text-sm text-foreground hover:bg-accent'}>
+                    {t.name}
+                    {#if manageSelectedTopics[t.id]}
+                      <span class="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/25 px-1.5 text-xs font-bold">{selectedCountInTopic(t.id)}</span>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
             {/if}
-          {/each}
-        {/if}
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-1 text-sm text-muted-foreground">
+            <span>Pilih soal per topik</span>
+            <span class="font-medium text-foreground">
+              {Object.keys(manageSelected).length} soal dipilih
+              {#if Object.keys(manageSelectedTypes).length}
+                <span class="font-normal text-muted-foreground">({Object.entries(manageSelectedTypes).map(([t, n]) => `${n} ${TL[t as QuestionType]}`).join(' · ')})</span>
+              {/if}
+            </span>
+          </div>
+          <div>
+            <p class="mb-1 text-sm font-medium">Bobot Skor per Tipe (pengali)</p>
+            <p class="mb-2 text-xs text-muted-foreground">Hanya tipe terpilih yang punya pengali. MCQ &amp; Pilihan Ganda (Banyak Jawaban) tidak punya pengali.</p>
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {#each PENGALI_TYPES as t}
+                {#if manageSelectedTypes[t]}
+                  <label class="block">
+                    <span class="mb-1 block text-xs text-muted-foreground">{TL[t]} ({manageSelectedTypes[t]})</span>
+                    <input type="number" min="0.5" step="0.5" bind:value={manageTypeWeights[t]} class="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
+                  </label>
+                {/if}
+              {/each}
+            </div>
+          </div>
+        </div>
+        <div class="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-3">
+          {#if manageLoading}
+            <div class="grid place-items-center py-10 text-muted-foreground"><Loader2 class="h-5 w-5 animate-spin" /></div>
+          {:else if Object.keys(manageSelectedTopics).length === 0}
+            <p class="py-8 text-center text-sm text-muted-foreground">Pilih minimal satu topik untuk menampilkan soal.</p>
+          {:else}
+            {#each Object.keys(manageSelectedTopics) as tid (tid)}
+              <div class="flex items-center justify-between rounded-lg bg-secondary/60 px-3 py-1.5">
+                <span class="text-sm font-semibold text-foreground">
+                  {manageTopics.find((t) => t.id === tid)?.name ?? 'Topik'}
+                  <span class="ml-1 font-normal text-muted-foreground">({(manageQuestionsByTopic[tid] ?? []).length} soal)</span>
+                </span>
+                <label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={topicAllChecked(tid)} onchange={() => toggleTopicAll(tid)} class="accent-[hsl(var(--primary))]" />
+                  Semua
+                </label>
+              </div>
+              {#if !manageQuestionsByTopic[tid]}
+                <p class="px-1 text-sm text-muted-foreground">Memuat…</p>
+              {:else if manageQuestionsByTopic[tid].length === 0}
+                <p class="px-1 text-sm text-muted-foreground">Tidak ada soal di topik ini.</p>
+              {:else}
+                {#each manageQuestionsByTopic[tid] as q (q.id)}
+                  <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 hover:bg-accent">
+                    <input type="checkbox" checked={!!manageSelected[q.id]} onchange={() => toggleSelect(q.id)} class="mt-1 accent-[hsl(var(--primary))]" />
+                    <span class="min-w-0 flex-1">
+                      <span class="mb-1 inline-block rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground">{TL[q.questionType as QuestionType]}</span>
+                      <Html html={q.questionText} class="text-sm text-foreground" />
+                    </span>
+                  </label>
+                {/each}
+              {/if}
+            {/each}
+          {/if}
+        </div>
       </div>
-      <div class="flex justify-end gap-2 border-t border-border px-5 py-3">
+      <div class="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-3">
         <Button variant="outline" onclick={() => (manageShow = false)}>Batal</Button>
         <Button onclick={saveManage} disabled={manageSaving}>{#if manageSaving}<Loader2 class="h-4 w-4 animate-spin" />{/if} Simpan</Button>
       </div>

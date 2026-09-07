@@ -48,15 +48,28 @@ export async function importQuestions(rows: ExcelRow[], subjects: SubjectLike[],
       const mapel = String(r.mapel ?? r['mata pelajaran'] ?? '').trim().toLowerCase();
       const topik = String(r.topik ?? r['topic'] ?? '').trim().toLowerCase();
       const subj = byKey.get(mapel);
-      const topic = subj?.topics?.find((t) => t.name.toLowerCase() === topik);
+      let topic = subj?.topics?.find((t) => t.name.toLowerCase() === topik);
       if (!subj) {
         res.failed++;
         res.errors.push(`${line}: mapel "${r.mapel}" tidak ditemukan`);
         continue;
       }
+      if (!topic && topik) {
+        // Auto-create topic jika belum ada
+        try {
+          const created = await api.post<{ id: string; name: string }>('/topics', { subjectId: subj.id, name: String(r.topik ?? r['topic'] ?? '').trim() });
+          topic = { id: created.id, name: created.name };
+          if (subj.topics) subj.topics.push(topic);
+          res.errors.push(`${line}: topik "${topic.name}" dibuat otomatis`);
+        } catch (e: any) {
+          res.failed++;
+          res.errors.push(`${line}: gagal membuat topik "${r.topik}": ${e?.message || 'gagal'}`);
+          continue;
+        }
+      }
       if (!topic) {
         res.failed++;
-        res.errors.push(`${line}: topik "${r.topik}" tidak ditemukan pada mapel ${subj.name}`);
+        res.errors.push(`${line}: topik kosong`);
         continue;
       }
       const type = String(r.tipe ?? r['tipe soal'] ?? '').toUpperCase().trim();
