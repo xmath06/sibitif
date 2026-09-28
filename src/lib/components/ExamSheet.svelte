@@ -6,7 +6,8 @@
   import Badge from '$components/ui/Badge.svelte';
   import Progress from '$components/ui/Progress.svelte';
   import QuestionNavigator from '$components/QuestionNavigator.svelte';
-  import { PanelLeftClose, PanelLeftOpen, Flag, CheckCircle2, Loader2, Send, Wifi, WifiOff } from 'lucide-svelte';
+  import { PanelLeftClose, PanelLeftOpen, Flag, CheckCircle2, Loader2, Send, AlertTriangle, Wifi, WifiOff } from 'lucide-svelte';
+  import { AlertDialog } from 'bits-ui';
   import { formatDuration, cn } from '$lib/utils';
   import Html from '$components/Html.svelte';
   import RichTextEditor from '$components/RichTextEditor.svelte';
@@ -31,6 +32,10 @@
   let collapsed = $state(false);
   let saveState = $state<'idle' | 'saving' | 'saved'>('idle');
   let online = $state(true);
+  let confirmationOpen = $state(false);
+  let confirmationMessage = $state('');
+  let confirmationWarning = $state(false);
+  let confirmationResolve: ((confirmed: boolean) => void) | null = null;
 
   // answers keyed by questionId
   let answers = $state<Record<string, { selectedOptionId?: string; selectedOptionIds: string[]; essayAnswer?: string; isFlagged: boolean }>>({});
@@ -211,6 +216,27 @@
     return { unanswered, problems };
   }
 
+  function requestConfirmation(message: string, warning: boolean): Promise<boolean> {
+    confirmationMessage = message;
+    confirmationWarning = warning;
+    confirmationOpen = true;
+    return new Promise((resolve) => {
+      confirmationResolve = resolve;
+    });
+  }
+
+  function resolveConfirmation(confirmed: boolean) {
+    const resolve = confirmationResolve;
+    confirmationResolve = null;
+    confirmationOpen = false;
+    resolve?.(confirmed);
+  }
+
+  function handleConfirmationOpenChange(open: boolean) {
+    confirmationOpen = open;
+    if (!open && confirmationResolve) resolveConfirmation(false);
+  }
+
   async function submit() {
     if (!exam) return;
     submitError = '';
@@ -221,12 +247,11 @@
     ]
       .filter(Boolean)
       .join('\n');
-    if (warn) {
-      const ok = confirm(`${warn}\n\nYakin ingin tetap mengumpulkan?`);
-      if (!ok) return;
-    } else if (!confirm('Yakin ingin mengumpulkan ujian? Tindakan tidak dapat dibatalkan.')) {
-      return;
-    }
+    const ok = await requestConfirmation(
+      warn ? `${warn}\n\nYakin ingin tetap mengumpulkan?` : 'Yakin ingin mengumpulkan ujian? Tindakan tidak dapat dibatalkan.',
+      Boolean(warn)
+    );
+    if (!ok) return;
     submitting = true;
     try {
       await doSave();
@@ -311,6 +336,7 @@
     if (poll) clearInterval(poll);
     if (tickT) clearInterval(tickT);
     if (saveTimer) clearTimeout(saveTimer);
+    confirmationResolve?.(false);
     ac?.destroy();
   });
 
@@ -504,5 +530,58 @@
         <Progress class="mt-8" value={questionsState().filter((q) => q.answered).length} max={exam.questions.length} />
       </main>
     </div>
+
+    <AlertDialog.Root open={confirmationOpen} onOpenChange={handleConfirmationOpenChange}>
+      <AlertDialog.Portal>
+        <AlertDialog.Overlay class="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px]" />
+        <AlertDialog.Content
+          class="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl outline-none"
+        >
+          <div class={cn('h-1.5 w-full', confirmationWarning ? 'bg-amber-400' : 'bg-primary')}></div>
+          <div class="p-6">
+            <div class="flex items-start gap-4">
+              <div
+                class={cn(
+                  'grid h-11 w-11 shrink-0 place-items-center rounded-full',
+                  confirmationWarning ? 'bg-amber-100 text-amber-700' : 'bg-primary/10 text-primary'
+                )}
+              >
+                {#if confirmationWarning}
+                  <AlertTriangle class="h-5 w-5" />
+                {:else}
+                  <Send class="h-5 w-5" />
+                {/if}
+              </div>
+              <div class="min-w-0 pt-0.5">
+                <AlertDialog.Title class="text-lg font-semibold text-foreground">
+                  {confirmationWarning ? 'Periksa kembali jawaban' : 'Kumpulkan ujian?'}
+                </AlertDialog.Title>
+                <AlertDialog.Description class="mt-2 whitespace-pre-line text-sm leading-6 text-muted-foreground">
+                  {confirmationMessage}
+                </AlertDialog.Description>
+              </div>
+            </div>
+
+            <div class="mt-7 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <AlertDialog.Cancel
+                class="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onclick={() => resolveConfirmation(false)}
+              >
+                Batal
+              </AlertDialog.Cancel>
+              <AlertDialog.Action
+                class={cn(
+                  'inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-white shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  confirmationWarning ? 'bg-amber-600 hover:bg-amber-700' : 'bg-primary hover:bg-primary/90'
+                )}
+                onclick={() => resolveConfirmation(true)}
+              >
+                Ya, kumpulkan
+              </AlertDialog.Action>
+            </div>
+          </div>
+        </AlertDialog.Content>
+      </AlertDialog.Portal>
+    </AlertDialog.Root>
   </div>
 {/if}

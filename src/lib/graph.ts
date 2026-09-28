@@ -26,6 +26,7 @@ type Token =
   | { type: 'num'; value: number }
   | { type: 'id'; value: string }
   | { type: 'op'; value: '+' | '-' | '*' | '/' | '^' }
+  | { type: 'comma' }
   | { type: 'lp' }
   | { type: 'rp' }
   | { type: 'end' };
@@ -73,6 +74,11 @@ function tokenize(input: string): Token[] {
       i++;
       continue;
     }
+    if (c === ',') {
+      tokens.push({ type: 'comma' });
+      i++;
+      continue;
+    }
     if (c === ')') {
       tokens.push({ type: 'rp' });
       i++;
@@ -86,6 +92,9 @@ function tokenize(input: string): Token[] {
 
 class Parser {
   private pos = 0;
+  // Scope variabel terikat sigma (sum): { nama, box } — box dibagi oleh semua
+  // closure dalam suku, sehingga tiap iterasi cukup menulis box.v = k.
+  private scopes: { name: string; box: { v: number } }[] = [];
   constructor(private tokens: Token[], private deg = false) {}
 
   private peek(): Token {
@@ -102,7 +111,9 @@ class Parser {
 
   parse(): (x: number) => number {
     const expr = this.parseExpr();
-    if (this.peek().type !== 'end') throw new Error('Ekspresi tidak lengkap');
+    const t = this.peek();
+    if (t.type === 'comma') throw new Error('Koma (,) hanya boleh di dalam argumen fungsi, mis. log(x, 2)');
+    if (t.type !== 'end') throw new Error('Ekspresi tidak lengkap');
     return expr;
   }
 
@@ -189,7 +200,15 @@ class Parser {
     }
     if (tok.type === 'id') {
       const id = tok.value;
+      // Variabel terikat sigma (sum) — scope terdalam menang, mis. sum(x,…) → x = indeks
+      for (let s = this.scopes.length - 1; s >= 0; s--) {
+        if (this.scopes[s].name === id) {
+          const box = this.scopes[s].box;
+          return () => box.v;
+        }
+      }
       if (id === 'x') return (x) => x;
+      if (id === 'sum') return this.parseSum();
       if (id in CONSTS) {
         const v = CONSTS[id];
         return () => v;
@@ -197,7 +216,18 @@ class Parser {
       if (id in FUNCS) {
         this.expect('lp');
         const arg = this.parseExpr();
+        let base: ((x: number) => number) | null = null;
+        if (this.peek().type === 'comma') {
+          this.next();
+          base = this.parseExpr();
+        }
         this.expect('rp');
+        if (base) {
+          // argumen kedua → hanya log(x, basis) yang didukung, mis. log(x, 2)
+          if (id !== 'log') throw new Error(`Fungsi "${id}" hanya menerima satu argumen`);
+          const b = base;
+          return (x) => Math.log(arg(x)) / Math.log(b(x));
+        }
         const fn = FUNCS[id];
         if (this.deg) {
           // Mode derajat: sin/cos/tan terima input °→rad, invers menghasilkan °
@@ -220,12 +250,51 @@ class Parser {
     throw new Error(`Token tak terduga: "${tok.type}"`);
   }
 
+  // sum(var, awal, akhir, suku) → notasi sigma. Mis. sum(i,1,10,i^2) = Σ i².
+  // Variabel sumbu di-scope hanya di dalam suku (awl/akhir tetap memakai x luar).
+  private parseSum(): (x: number) => number {
+    this.expect('lp');
+    const vtok = this.next();
+    if (vtok.type !== 'id') throw new Error('Argumen pertama sum harus nama variabel, mis. i');
+    this.expect('comma');
+    const startFn = this.parseExpr();
+    this.expect('comma');
+    const endFn = this.parseExpr();
+    this.expect('comma');
+    const box = { v: 0 };
+    this.scopes.push({ name: vtok.value, box });
+    const body = this.parseExpr();
+    this.scopes.pop();
+    this.expect('rp');
+    return (x) => {
+      const a = startFn(x);
+      const b = endFn(x);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return NaN;
+      const lo = Math.ceil(a);
+      const hi = Math.floor(b);
+      const n = hi - lo + 1;
+      if (n <= 0) return 0;
+      if (n > 10000) throw new Error('Rentang sum terlalu besar (maks 10000 iterasi)');
+      let s = 0;
+      for (let k = lo; k <= hi; k++) {
+        box.v = k;
+        s += body(x);
+      }
+      return s;
+    };
+  }
+
   private startsFactor(): boolean {
     const tok = this.peek();
     return (
       tok.type === 'num' ||
       tok.type === 'lp' ||
-      (tok.type === 'id' && (tok.value === 'x' || tok.value in CONSTS || tok.value in FUNCS))
+      (tok.type === 'id' &&
+        (tok.value === 'x' ||
+          tok.value === 'sum' ||
+          tok.value in CONSTS ||
+          tok.value in FUNCS ||
+          this.scopes.some((s) => s.name === tok.value)))
     );
   }
 }
@@ -366,17 +435,26 @@ function svgRuns(runs: Run[]): string {
   return out;
 }
 
+// Tampilan label: sum(i,awal,akhir,suku) → Σ(i=awal..akhir, suku)
+function prettyExpr(expr: string): string {
+  return expr.replace(
+    /sum\(\s*([A-Za-z_]\w*)\s*,\s*([^,]+?)\s*,\s*([^,]+?)\s*,/g,
+    (_m, v: string, a: string, b: string) => `Σ(${v}=${a}..${b}, `
+  );
+}
+
 // Label lengkap dengan notasi fungsi: "f(x) = x+2" atau "f⁻¹(x) = …"
 function functionLabel(fn: GraphFunction, idx: number): { markup: string; plain: string } {
   const name = fn.name && fn.name.trim() ? fn.name.trim() : DEFAULT_NAMES[idx % DEFAULT_NAMES.length];
+  const shown = prettyExpr(fn.expr);
   const runs: Run[] = [
     { text: name, italic: true },
     ...(fn.inverse ? [{ text: '-1', sup: true }] : []),
     { text: '(x) = ' },
-    ...parseExprRuns(fn.expr)
+    ...parseExprRuns(shown)
   ];
   const plainName = fn.inverse ? `${name}⁻¹` : name;
-  return { markup: svgRuns(runs), plain: `${plainName}(x) = ${fn.expr}` };
+  return { markup: svgRuns(runs), plain: `${plainName}(x) = ${shown}` };
 }
 
 // Label persamaan di ujung kurva (kanan bawah/atas dari titik akhir).
@@ -457,11 +535,21 @@ export function renderFunctionGraph(opts: GraphOptions): string {
   const sx = (x: number) => margin.l + ((x - xMin) / (xMax - xMin)) * plotW;
   const sy = (y: number) => margin.t + plotH - ((y - yMin) / (yMax - yMin)) * plotH;
 
+  // Titik potong sumbu (0,0) + visibilitas — dipakai penempatan label angka & tick.
+  const x0 = sx(0);
+  const y0 = sy(0);
+  const xAxisVisible = yMin <= 0 && yMax >= 0; // sumbu-x (garis y=0) tampil?
+  const yAxisVisible = xMin <= 0 && xMax >= 0; // sumbu-y (garis x=0) tampil?
+
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Grafik ${funcs.map((f) => f.expr).join(' ; ')}">`);
-  parts.push(`<style>text{font-family:Arial,sans-serif;font-size:12px;fill:#334155}.grid{stroke:#e2e8f0;stroke-width:1}.axis{stroke:#0f172a;stroke-width:1.5}.curve{fill:none;stroke:#2563eb;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.tick{fill:#94a3b8}</style>`);
+  parts.push(`<style>text{font-family:Arial,sans-serif;font-size:12px;fill:#334155}.grid{stroke:#e2e8f0;stroke-width:1}.axis{stroke:#0f172a;stroke-width:1.5}.curve{fill:none;stroke:#2563eb;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.tick{fill:#64748b;paint-order:stroke;stroke:#ffffff;stroke-width:3px;stroke-linejoin:round}</style>`);
+  // Area clip untuk kurva: memotong visual titik di luar plot (tanpa flatten ke batas y).
+  parts.push(`<defs><clipPath id="plot-clip"><rect x="${fmt(margin.l)}" y="${fmt(margin.t)}" width="${fmt(plotW)}" height="${fmt(plotH)}"/></clipPath></defs>`);
 
-  // Garis bantu & label sumbu (angka di tepi)
+  // Garis bantu & label angka — gaya cartesius matematika: angka menempel DI ATAS
+  // sumbu (bukan di tepi canvas). Bila sumbu tidak terlihat (0 di luar rentang),
+  // fallback ke tepi plot seperti gambar cartesius tanpa sumbu.
   if (showGrid) {
     // Step sumbu-x: dalam derajat pilih nilai "bersih" (30/45/60/90/180) agar label trig rapi.
     let xStep: number;
@@ -471,17 +559,28 @@ export function renderFunctionGraph(opts: GraphOptions): string {
       xStep = niceStep(xMax - xMin, Math.max(8, Math.floor(plotW / 60)));
     }
     const yStep = niceStep(yMax - yMin, Math.max(8, Math.floor(plotH / 45)));
+    // Posisi label: tepat di bawah garis y=0 / di kiri garis x=0 (bila sumbu tampil)
+    const xLabelY = xAxisVisible ? y0 + 16 : margin.t + plotH + 18;
+    const yLabelX = yAxisVisible ? x0 - 7 : margin.l - 8;
     for (let x = Math.ceil(xMin / xStep) * xStep; x <= xMax + xStep / 100; x += xStep) {
       if (Math.abs(x) < xStep / 100) continue; // skip sumbu y
       const px = sx(x);
       parts.push(`<line class="grid" x1="${fmt(px)}" y1="${margin.t}" x2="${fmt(px)}" y2="${margin.t + plotH}"/>`);
-      parts.push(`<text class="tick" x="${fmt(px)}" y="${margin.t + plotH + 18}" text-anchor="middle">${degMode ? fmt(x) + '°' : fmt(x)}</text>`);
+      // tick gelap menyebrangi sumbu-x (penanda angka ala kartesius)
+      if (xAxisVisible) {
+        parts.push(`<line x1="${fmt(px)}" y1="${fmt(y0 - 3)}" x2="${fmt(px)}" y2="${fmt(y0 + 3)}" stroke="#0f172a" stroke-width="1"/>`);
+      }
+      parts.push(`<text class="tick" x="${fmt(px)}" y="${fmt(xLabelY)}" text-anchor="middle">${degMode ? fmt(x) + '°' : fmt(x)}</text>`);
     }
     for (let y = Math.ceil(yMin / yStep) * yStep; y <= yMax; y += yStep) {
       if (Math.abs(y) < yStep / 100) continue; // skip sumbu x
       const py = sy(y);
       parts.push(`<line class="grid" x1="${margin.l}" y1="${fmt(py)}" x2="${margin.l + plotW}" y2="${fmt(py)}"/>`);
-      parts.push(`<text class="tick" x="${margin.l - 8}" y="${fmt(py + 4)}" text-anchor="end">${fmt(y)}</text>`);
+      // tick gelap menyebrangi sumbu-y
+      if (yAxisVisible) {
+        parts.push(`<line x1="${fmt(x0 - 3)}" y1="${fmt(py)}" x2="${fmt(x0 + 3)}" y2="${fmt(py)}" stroke="#0f172a" stroke-width="1"/>`);
+      }
+      parts.push(`<text class="tick" x="${fmt(yLabelX)}" y="${fmt(py + 4)}" text-anchor="end">${fmt(y)}</text>`);
     }
   }
 
@@ -489,17 +588,19 @@ export function renderFunctionGraph(opts: GraphOptions): string {
   // sumbu-y (garis vertikal x=0) tampil bila 0 berada dalam rentang x.
   // (Sempat terbalik: sumbu-y hilang untuk kurva yang seluruhnya di atas sumbu-x,
   //  mis. f(x)=x^2+3.)
-  const x0 = sx(0);
-  const y0 = sy(0);
-  if (yMin <= 0 && yMax >= 0) {
+  if (xAxisVisible) {
     parts.push(`<line class="axis" x1="${fmt(margin.l)}" y1="${fmt(y0)}" x2="${fmt(margin.l + plotW)}" y2="${fmt(y0)}"/>`);
     parts.push(`<polygon points="${fmt(margin.l + plotW)},${fmt(y0)} ${fmt(margin.l + plotW - 9)},${fmt(y0 - 4)} ${fmt(margin.l + plotW - 9)},${fmt(y0 + 4)}" fill="#0f172a"/>`);
   }
-  if (xMin <= 0 && xMax >= 0) {
+  if (yAxisVisible) {
     parts.push(`<line class="axis" x1="${fmt(x0)}" y1="${fmt(margin.t)}" x2="${fmt(x0)}" y2="${fmt(margin.t + plotH)}"/>`);
     parts.push(`<polygon points="${fmt(x0)},${fmt(margin.t)} ${fmt(x0 - 4)},${fmt(margin.t + 9)} ${fmt(x0 + 4)},${fmt(margin.t + 9)}" fill="#0f172a"/>`);
   }
 
+  // =========================================================================
+  // MULAI GAMBAR ISI GRAFIK FUNGSI (kurva f(x)) — di luar sumbu X/Y (cartesian)
+  // Sumbu + grid sudah digambar di atas; blok berikut hanya menggambar kurva.
+  // =========================================================================
   // Kurva: sampling + putus polyline di titik non-finite / di luar rentang / lompatan besar
   const plotRight = margin.l + plotW;
   const plotBottom = margin.t + plotH;
@@ -508,7 +609,9 @@ export function renderFunctionGraph(opts: GraphOptions): string {
     const points: string[] = [];
     const flush = () => {
       if (points.length) {
-        parts.push(`<polyline class="curve" stroke="${color}" points="${points.join(' ')}"/>`);
+        // clip-path: titik di luar area plot dipotong tampilan (bukan di-flatten
+        // ke ymin/ymax — lihat bug lama di clamp sy(Math.max/min)).
+        parts.push(`<polyline class="curve" clip-path="url(#plot-clip)" stroke="${color}" points="${points.join(' ')}"/>`);
         points.length = 0;
       }
     };
@@ -533,7 +636,10 @@ export function renderFunctionGraph(opts: GraphOptions): string {
         continue;
       }
       const px = sx(x);
-      const py = sy(Math.max(yMin, Math.min(yMax, y)));
+      // JANGAN clamp y ke [yMin, yMax] — clamp menyebabkan kurva yang melewati
+      // batas "dipipihkan" horizontal sejajar ymin/ymax (bug). Biarkan koordinat
+      // keluar area plot; clip-path (#plot- crop visualnya di tepi plot.
+      const py = sy(y);
       if (prevY != null && Math.abs(y - prevY) > (yMax - yMin) * 4) {
         flush();
       }
